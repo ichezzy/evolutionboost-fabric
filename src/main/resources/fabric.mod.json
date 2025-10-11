@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "evolutionboost",
+  "version": "${version}",
+  "name": "Evolution Boost",
+  "description": "Server mod exclusively for the Cobbled Evolution modpack and server.",
+  "authors": ["ichezzy"],
+  "license": "ARR",
+  "icon": "assets/evolutionboost/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.ichezzy.evolutionboost.EvolutionBoost"],
+    "client": ["com.ichezzy.evolutionboost.EvolutionBoostClient"]
+  },
+  "mixins": ["evolutionboost.mixins.json"],
+  "depends": {
+    "java": ">=21",
+    "minecraft": "1.21.1",
+    "fabric": "*",
+    "fabric-language-kotlin": "*",
+    "cobblemon": ">=1.6.0 <1.7.0"
+  }
+}
