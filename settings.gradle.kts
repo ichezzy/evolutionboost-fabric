@@ -1,4 +1,4 @@
-rootProject.name = "evolutionbosst-fabric"
+rootProject.name = "evolutionboost-fabric"
 
 pluginManagement {
     repositories {

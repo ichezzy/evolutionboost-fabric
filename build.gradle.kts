@@ -1,8 +1,8 @@
 plugins {
     id("java")
-    id("dev.architectury.loom") version "1.7-SNAPSHOT"
-    id("architectury-plugin") version "3.4-SNAPSHOT"
-    kotlin("jvm") version "1.9.23"
+    id("dev.architectury.loom") version("1.7-SNAPSHOT")
+    id("architectury-plugin") version("3.4-SNAPSHOT")
+    kotlin("jvm") version ("1.9.23")
 }
 
 group = property("maven_group")!!
@@ -52,26 +52,18 @@ repositories {
 }
 
 dependencies {
-    minecraft("net.minecraft:minecraft:${property("minecraft_version")}")
+    minecraft("net.minecraft:minecraft:1.21.1")
     mappings(loom.officialMojangMappings())
+    modImplementation("net.fabricmc:fabric-loader:0.16.5")
 
-    modImplementation("net.fabricmc:fabric-loader:${property("loader_version")}")
+    modRuntimeOnly("net.fabricmc.fabric-api:fabric-api:0.104.0+1.21.1")
+    modImplementation(fabricApi.module("fabric-command-api-v2", "0.104.0+1.21.1"))
 
-    // Fabric API wie im Cobblemon MDK
-    modRuntimeOnly("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_runtime")}")
+    modImplementation("net.fabricmc:fabric-language-kotlin:1.12.3+kotlin.2.0.21")
+    modImplementation("com.cobblemon:fabric:1.6.0+1.21.1-SNAPSHOT")
 
-    // ➜ zusätzliche Module NUR für Compile/Zeit:
-    modImplementation(fabricApi.module("fabric-lifecycle-events-v1", property("fabric_api_runtime") as String))
-    modImplementation(fabricApi.module("fabric-item-group-api-v1",   property("fabric_api_runtime") as String))
-
-    // Command API bleibt wie gehabt (aus dem MDK)
-    modImplementation(fabricApi.module("fabric-command-api-v2", property("fabric_api_cmd") as String))
-
-    // Kotlin-Runtime (Cobblemon braucht das)
-    modImplementation("net.fabricmc:fabric-language-kotlin:${property("fabric_kotlin")}")
-
-    // Cobblemon (ImpactDev Maven, dev build)
-    modImplementation("com.cobblemon:fabric:${property("cobblemon_version")}")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
 }
 
 tasks.processResources {
