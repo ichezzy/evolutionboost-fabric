@@ -4,8 +4,11 @@ import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
 import net.minecraft.server.MinecraftServer;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.*;
 
@@ -25,8 +28,9 @@ public final class DropHook {
             double mult = BoostManager.get(server).getMultiplierFor(BoostType.DROP, null);
             if (mult <= 1.0) return;
 
-            Method mGetDrops = find(ev.getClass(), "getDrops");
+            // Liste der bereits ausgewählten DropEntries holen
             List<?> drops = null;
+            Method mGetDrops = find(ev.getClass(), "getDrops");
             if (mGetDrops != null) {
                 Object obj = mGetDrops.invoke(ev);
                 if (obj instanceof List<?> l) drops = l;
@@ -41,38 +45,18 @@ public final class DropHook {
             }
             if (drops == null || drops.isEmpty()) return;
 
-            for (Object entry : drops) {
-                scaleDropEntryQuantities(entry, mult);
-            }
-        } catch (Throwable ignored) {}
-    }
+            // Dupliziere die Einträge in-place:
+            // base = floor(mult), frac = mult - base -> mit Wahrscheinlichkeit "frac" noch einmal hinzufügen
+            int base = (int) Math.floor(mult);
+            double frac = mult - base;
+            if (base <= 1 && frac <= 1e-9) return;
 
-    private static void scaleDropEntryQuantities(Object entry, double mult) {
-        try {
-            Method getRange = find(entry.getClass(), "getQuantityRange");
-            Class<?> intRange = Class.forName("kotlin.ranges.IntRange");
-            Method setRange = find(entry.getClass(), "setQuantityRange", intRange);
-            if (getRange != null && setRange != null) {
-                Object range = getRange.invoke(entry);
-                if (range != null) {
-                    int start = (int) range.getClass().getMethod("getFirst").invoke(range);
-                    int end   = (int) range.getClass().getMethod("getLast").invoke(range);
-                    int nStart = Math.max(1, (int) Math.round(start * mult));
-                    int nEnd   = Math.max(nStart, (int) Math.round(end * mult));
-                    Object newRange = intRange.getConstructor(int.class, int.class).newInstance(nStart, nEnd);
-                    setRange.invoke(entry, newRange);
-                    return;
-                }
+            List snapshot = new ArrayList(drops);  // bereits ausgewählte Einträge
+            for (int i = 1; i < base; i++) {
+                drops.addAll(snapshot);
             }
-        } catch (Throwable ignored) {}
-
-        try {
-            Method getQty = find(entry.getClass(), "getQuantity");
-            Method setQty = find(entry.getClass(), "setQuantity", int.class);
-            if (getQty != null && setQty != null) {
-                int qty = (Integer) getQty.invoke(entry);
-                int nQty = Math.max(1, (int) Math.round(qty * mult));
-                setQty.invoke(entry, nQty);
+            if (frac > 1e-9 && new Random().nextDouble() < frac) {
+                drops.addAll(snapshot);
             }
         } catch (Throwable ignored) {}
     }

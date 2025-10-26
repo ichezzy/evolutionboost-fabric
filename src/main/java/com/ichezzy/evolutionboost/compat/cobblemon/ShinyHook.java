@@ -4,7 +4,8 @@ import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
 import net.minecraft.server.MinecraftServer;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.*;
@@ -14,19 +15,20 @@ public final class ShinyHook {
     private ShinyHook() {}
 
     public static void register(MinecraftServer server, Class<?> clsEvents, Object priority) {
-        // Event: SHINY_CHANCE_CALCULATION
+        // SHINY_CHANCE_CALCULATION
         subscribeField(clsEvents, priority, "SHINY_CHANCE_CALCULATION", ev -> {
             tryShinyEvent(server, ev);
             return unit();
         });
 
-        // Fallback beim Spawn: POKEMON_ENTITY_SPAWN
+        // Fallback beim Spawn
         subscribeField(clsEvents, priority, "POKEMON_ENTITY_SPAWN", ev -> {
             tryShinySpawnFallback(server, ev);
             return unit();
         });
     }
 
+    /** Event: Chance = current * mult (falls addModificationFunction verfügbar, sonst addModifier-Delta). */
     private static void tryShinyEvent(MinecraftServer server, Object ev) {
         try {
             double mult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null);
@@ -56,6 +58,11 @@ public final class ShinyHook {
         } catch (Throwable ignored) {}
     }
 
+    /**
+     * Spawn-Fallback: zusätzliche unabhängige Rolls.
+     * R = ceil(mult), p0 = 1/4096 → Erfolg, wenn mind. ein Roll trifft.
+     * (Nur wenn das Pokémon noch nicht shiny ist.)
+     */
     private static void tryShinySpawnFallback(MinecraftServer server, Object ev) {
         try {
             double mult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null);
@@ -78,10 +85,15 @@ public final class ShinyHook {
                     boolean already = getIsShiny != null && Boolean.TRUE.equals(getIsShiny.invoke(pokemon));
                     if (already) return;
 
-                    double baseP = 1.0 / 4096.0; // Server-config baseline wird i.d.R. in dieses Schema überführt
-                    double targetP = Math.min(1.0, baseP * mult);
+                    final double p0 = 1.0 / 4096.0; // Basis-Odds
+                    final int rolls  = Math.max(1, (int) Math.ceil(mult));
+                    ThreadLocalRandom rnd = ThreadLocalRandom.current();
+                    boolean success = false;
+                    for (int i = 0; i < rolls; i++) {
+                        if (rnd.nextDouble() < p0) { success = true; break; }
+                    }
 
-                    if (ThreadLocalRandom.current().nextDouble() < targetP) {
+                    if (success) {
                         Method setShiny = find(pokemon.getClass(), "setShiny", boolean.class);
                         if (setShiny != null) setShiny.invoke(pokemon, Boolean.TRUE);
                     }

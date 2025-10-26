@@ -2,6 +2,8 @@ package com.ichezzy.evolutionboost;
 
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
+import com.ichezzy.evolutionboost.item.ModItemGroup;
+import com.ichezzy.evolutionboost.item.ModItems;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -18,7 +20,11 @@ public class EvolutionBoost implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("[{}] Initializing…", MOD_ID);
 
-        // Welt ist fertig -> SavedData laden + Hooks registrieren
+        // ---- Items / Creative Tab ----
+        ModItems.registerAll();
+        ModItemGroup.register();
+
+        // ---- Cobblemon Hooks ----
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             BoostManager.get(server);
             if (FabricLoader.getInstance().isModLoaded("cobblemon")) {
@@ -28,23 +34,17 @@ public class EvolutionBoost implements ModInitializer {
                 LOGGER.warn("Cobblemon not detected – hooks skipped");
             }
         });
+        ServerLifecycleEvents.SERVER_STOPPING.register(EvolutionBoost::safeUnregister);
 
-        // Beim Stop optional wieder aufräumen (falls HooksRegistrar.unregister existiert)
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> safeUnregister(server));
-
-        // Timer/Bossbars updaten
+        // ---- Ticker / Commands ----
         ServerTickEvents.END_SERVER_TICK.register(server -> BoostManager.get(server).tick(server));
-
-        // Commands registrieren
         com.ichezzy.evolutionboost.command.BoostCommand.register();
     }
 
-    /** Ruft HooksRegistrar.unregister(server) nur auf, wenn die Methode existiert. */
+    /** optional – ruft HooksRegistrar.unregister nur auf, wenn vorhanden */
     private static void safeUnregister(MinecraftServer server) {
         try {
             HooksRegistrar.class.getMethod("unregister", MinecraftServer.class).invoke(null, server);
-        } catch (Throwable ignored) {
-            // unregister ist optional – wenn nicht vorhanden, einfach nichts tun
-        }
+        } catch (Throwable ignored) { }
     }
 }

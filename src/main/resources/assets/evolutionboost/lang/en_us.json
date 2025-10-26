@@ -1,0 +1,39 @@
+{
+  "itemGroup.evolutionboost.main": "EvolutionBoost",
+
+  "item.evolutionboost.evolution_coin_bronze": "Evolution Coin (Bronze)",
+  "item.evolutionboost.evolution_coin_silver": "Evolution Coin (Silver)",
+  "item.evolutionboost.evolution_coin_gold": "Evolution Coin (Gold)",
+
+  "item.evolutionboost.halloween_candy": "Halloween Candy",
+  "item.evolutionboost.halloween_blood_vial": "Blood Vial",
+  "item.evolutionboost.halloween_bundle": "Halloween Bundle",
+
+  "item.evolutionboost.safari_ticket": "Safari Ticket",
+
+  "item.evolutionboost.shiny_charm": "Shiny Charm",
+  "item.evolutionboost.event_voucher_blank": "Event Voucher (Blank)",
+  "item.evolutionboost.event_voucher_iv": "Event Voucher – IV",
+  "item.evolutionboost.event_voucher_xp": "Event Voucher – XP",
+  "item.evolutionboost.event_voucher_shiny": "Event Voucher – Shiny",
+  "item.evolutionboost.event_voucher_drop": "Event Voucher – Drop",
+  "item.evolutionboost.event_voucher_ev": "Event Voucher – EV",
+
+  "tooltip.evolutionboost.coin_bronze": "Basic event currency. (placeholder)",
+  "tooltip.evolutionboost.coin_silver": "Valuable event currency. (placeholder)",
+  "tooltip.evolutionboost.coin_gold": "Premium event currency. (placeholder)",
+
+  "tooltip.evolutionboost.halloween_candy": "Trick or treat! (placeholder)",
+  "tooltip.evolutionboost.halloween_blood_vial": "A strange crimson vial. (placeholder)",
+  "tooltip.evolutionboost.halloween_bundle": "A strange and eerie bundle. Dare to open it and see what's inside? (placeholder)",
+
+  "tooltip.evolutionboost.safari_ticket": "Admits one to the Safari Zone. (placeholder)",
+
+  "tooltip.evolutionboost.shiny_charm": "A charm that seems to be increasing the spawning rates of shinies passively. (placeholder)",
+  "tooltip.evolutionboost.voucher_blank": "Unassigned voucher. (placeholder)",
+  "tooltip.evolutionboost.voucher_iv": "Redeem for IV boost. (placeholder)",
+  "tooltip.evolutionboost.voucher_xp": "Redeem for XP boost. (placeholder)",
+  "tooltip.evolutionboost.voucher_shiny": "Redeem for shiny boost. (placeholder)",
+  "tooltip.evolutionboost.voucher_drop": "Redeem for drop boost. (placeholder)",
+  "tooltip.evolutionboost.voucher_ev": "Redeem for EV boost. (placeholder)"
+}
