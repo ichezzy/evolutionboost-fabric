@@ -1,43 +1,45 @@
 package com.ichezzy.evolutionboost.item;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
-import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
-import net.minecraft.item.ItemGroup;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.ItemStack;
 
 public final class ModItemGroup {
     private ModItemGroup() {}
-    public static ItemGroup GROUP;
+    public static CreativeModeTab GROUP;
 
     public static void register() {
         GROUP = Registry.register(
-                Registries.ITEM_GROUP,
-                new Identifier(EvolutionBoost.MOD_ID, "main"),
-                FabricItemGroup.builder()
+                BuiltInRegistries.CREATIVE_MODE_TAB,
+                ResourceLocation.fromNamespaceAndPath(EvolutionBoost.MOD_ID, "main"),
+                // 1.21+: Row + column erforderlich
+                CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
                         .icon(() -> new ItemStack(ModItems.EVOLUTION_COIN_GOLD))
-                        .displayName(Text.translatable("itemGroup." + EvolutionBoost.MOD_ID + ".main"))
-                        .entries((ctx, entries) -> {
-                            entries.add(ModItems.EVOLUTION_COIN_BRONZE);
-                            entries.add(ModItems.EVOLUTION_COIN_SILVER);
-                            entries.add(ModItems.EVOLUTION_COIN_GOLD);
+                        .title(Component.translatable("itemGroup." + EvolutionBoost.MOD_ID + ".main"))
+                        .displayItems((parameters, output) -> {
+                            // Coins
+                            output.accept(ModItems.EVOLUTION_COIN_BRONZE);
+                            output.accept(ModItems.EVOLUTION_COIN_SILVER);
+                            output.accept(ModItems.EVOLUTION_COIN_GOLD);
 
-                            entries.add(ModItems.HALLOWEEN_CANDY);
-                            entries.add(ModItems.HALLOWEEN_BLOOD_VIAL);
-                            entries.add(ModItems.HALLOWEEN_BUNDLE);
+                            // Halloween
+                            output.accept(ModItems.HALLOWEEN_CANDY);
+                            output.accept(ModItems.HALLOWEEN_BLOOD_VIAL);
+                            output.accept(ModItems.HALLOWEEN_BUNDLE);
 
-                            entries.add(ModItems.SAFARI_TICKET);
-
-                            entries.add(ModItems.SHINY_CHARM);
-                            entries.add(ModItems.EVENT_VOUCHER_BLANK);
-                            entries.add(ModItems.EVENT_VOUCHER_IV);
-                            entries.add(ModItems.EVENT_VOUCHER_XP);
-                            entries.add(ModItems.EVENT_VOUCHER_SHINY);
-                            entries.add(ModItems.EVENT_VOUCHER_DROP);
-                            entries.add(ModItems.EVENT_VOUCHER_EV);
+                            // Tickets & Voucher
+                            output.accept(ModItems.SAFARI_TICKET);
+                            output.accept(ModItems.SHINY_CHARM);
+                            output.accept(ModItems.EVENT_VOUCHER_BLANK);
+                            output.accept(ModItems.EVENT_VOUCHER_IV);
+                            output.accept(ModItems.EVENT_VOUCHER_XP);
+                            output.accept(ModItems.EVENT_VOUCHER_SHINY);
+                            output.accept(ModItems.EVENT_VOUCHER_DROP);
+                            output.accept(ModItems.EVENT_VOUCHER_EV);
                         })
                         .build()
         );

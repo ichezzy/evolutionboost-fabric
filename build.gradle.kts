@@ -74,6 +74,8 @@ dependencies {
     modImplementation("net.fabricmc:fabric-loader:0.16.5")
     modRuntimeOnly("net.fabricmc.fabric-api:fabric-api:0.104.0+1.21.1")
     modImplementation(fabricApi.module("fabric-command-api-v2", "0.104.0+1.21.1"))
+    modImplementation(fabricApi.module("fabric-networking-api-v1", "0.104.0+1.21.1"))
+
 
     // --- Kotlin-Runtime (Cobblemon benötigt sie) ---
     modImplementation("net.fabricmc:fabric-language-kotlin:1.12.3+kotlin.2.0.21")
