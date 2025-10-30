@@ -48,6 +48,30 @@ public final class ModItems {
                     "tooltip.evolutionboost.halloween_bundle")
     );
 
+    public static final Item HALLOWEEN_TICKET = register(
+            "halloween_ticket",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.halloween_ticket")
+    );
+
+    public static final Item HALLOWEEN25_BRONZE = register(
+            "halloween25_bronze",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.halloween25_bronze")
+    );
+
+    public static final Item HALLOWEEN25_SILVER = register(
+            "halloween25_silver",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.halloween25_silver")
+    );
+
+    public static final Item HALLOWEEN25_GOLD = register(
+            "halloween25_gold",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.halloween25_gold")
+    );
+
     // ---- Safari / Voucher (Platzhalter) ----
     public static final Item SHINY_CHARM = register(
             "shiny_charm",

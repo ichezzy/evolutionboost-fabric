@@ -8,6 +8,7 @@
   "item.evolutionboost.halloween_candy": "Halloween Candy",
   "item.evolutionboost.halloween_blood_vial": "Blood Vial",
   "item.evolutionboost.halloween_bundle": "Halloween Bundle",
+  "item.evolutionboost.halloween_ticket": "Halloween Ticket",
 
   "item.evolutionboost.safari_ticket": "Safari Ticket",
 
@@ -26,6 +27,7 @@
   "tooltip.evolutionboost.halloween_candy": "Trick or treat! (placeholder)",
   "tooltip.evolutionboost.halloween_blood_vial": "A strange crimson vial. (placeholder)",
   "tooltip.evolutionboost.halloween_bundle": "A strange and eerie bundle. Dare to open it and see what's inside? (placeholder)",
+  "tooltip.evolutionboost.halloween_ticket": "A mysterious ticket emitting a gloomy darkness.",
 
   "tooltip.evolutionboost.safari_ticket": "Admits one to the Safari Zone. (placeholder)",
 

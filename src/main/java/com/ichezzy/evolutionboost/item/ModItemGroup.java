@@ -30,6 +30,10 @@ public final class ModItemGroup {
                             output.accept(ModItems.HALLOWEEN_CANDY);
                             output.accept(ModItems.HALLOWEEN_BLOOD_VIAL);
                             output.accept(ModItems.HALLOWEEN_BUNDLE);
+                            output.accept(ModItems.HALLOWEEN_TICKET);
+                            output.accept(ModItems.HALLOWEEN25_BRONZE);
+                            output.accept(ModItems.HALLOWEEN25_SILVER);
+                            output.accept(ModItems.HALLOWEEN25_GOLD);
 
                             // Tickets & Voucher
                             output.accept(ModItems.SAFARI_TICKET);
