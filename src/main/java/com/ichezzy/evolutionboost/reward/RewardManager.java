@@ -414,6 +414,31 @@ public final class RewardManager {
         }
     }
 
+    // Liste der Rollen im Chat ausgeben: /rewards list <donator|gym>
+    public static void sendRoleList(net.minecraft.commands.CommandSourceStack src, String roleKey) {
+        final java.util.Set<String> names;
+        if ("donator".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_DONATOR;
+        } else if ("gym".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_GYM;
+        } else {
+            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("[Rewards] Unknown role: " + roleKey)
+                    .withStyle(net.minecraft.ChatFormatting.RED), false);
+            return;
+        }
+
+        if (names.isEmpty()) {
+            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("[Rewards] No entries for '" + roleKey + "'.")
+                    .withStyle(net.minecraft.ChatFormatting.GRAY, net.minecraft.ChatFormatting.ITALIC), false);
+            return;
+        }
+
+        String joined = String.join(", ", names);
+        src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("[Rewards] " + roleKey + ": " + joined)
+                .withStyle(net.minecraft.ChatFormatting.GRAY, net.minecraft.ChatFormatting.ITALIC), false);
+    }
+
+
     /* ================== State ================== */
 
     private static final class PlayerRewardState {

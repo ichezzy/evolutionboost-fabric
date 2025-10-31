@@ -3,20 +3,22 @@ package com.ichezzy.evolutionboost.command;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.reward.RewardType;
 import com.mojang.brigadier.CommandDispatcher;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
-import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerPlayer;
 
 public final class RewardCommand {
     private RewardCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
+        // ====== /rewards (Legacy-Root) ======
         d.register(
                 Commands.literal("rewards")
 
+                        // ---- info ----
                         .then(Commands.literal("info")
                                 .executes(ctx -> {
                                     ServerPlayer p = ctx.getSource().getPlayerOrException();
@@ -25,35 +27,42 @@ public final class RewardCommand {
                                 })
                         )
 
+                        // ---- claim ----
                         .then(Commands.literal("claim")
-                                .then(Commands.literal("daily")
-                                        .executes(ctx -> {
-                                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                                            return RewardManager.claim(p, RewardType.DAILY) ? 1 : 0;
-                                        })
-                                )
-                                .then(Commands.literal("weekly")
-                                        .executes(ctx -> {
-                                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                                            return RewardManager.claim(p, RewardType.WEEKLY) ? 1 : 0;
-                                        })
-                                )
+                                .then(Commands.literal("daily").executes(ctx -> {
+                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
+                                    return RewardManager.claim(p, RewardType.DAILY) ? 1 : 0;
+                                }))
+                                .then(Commands.literal("weekly").executes(ctx -> {
+                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
+                                    return RewardManager.claim(p, RewardType.WEEKLY) ? 1 : 0;
+                                }))
                                 .then(Commands.literal("monthly")
-                                        .then(Commands.literal("donator")
-                                                .executes(ctx -> {
-                                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                                                    return RewardManager.claim(p, RewardType.MONTHLY_DONATOR) ? 1 : 0;
-                                                })
-                                        )
-                                        .then(Commands.literal("gym")
-                                                .executes(ctx -> {
-                                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                                                    return RewardManager.claim(p, RewardType.MONTHLY_GYM) ? 1 : 0;
-                                                })
-                                        )
+                                        .then(Commands.literal("donator").executes(ctx -> {
+                                            ServerPlayer p = ctx.getSource().getPlayerOrException();
+                                            return RewardManager.claim(p, RewardType.MONTHLY_DONATOR) ? 1 : 0;
+                                        }))
+                                        .then(Commands.literal("gym").executes(ctx -> {
+                                            ServerPlayer p = ctx.getSource().getPlayerOrException();
+                                            return RewardManager.claim(p, RewardType.MONTHLY_GYM) ? 1 : 0;
+                                        }))
                                 )
                         )
 
+                        // ---- list ----
+                        .then(Commands.literal("list")
+                                .requires(src -> src.hasPermission(2))
+                                .then(Commands.literal("donator").executes(ctx -> {
+                                    RewardManager.sendRoleList(ctx.getSource(), "donator");
+                                    return 1;
+                                }))
+                                .then(Commands.literal("gym").executes(ctx -> {
+                                    RewardManager.sendRoleList(ctx.getSource(), "gym");
+                                    return 1;
+                                }))
+                        )
+
+                        // ---- set <player> <role> <true|false> ----
                         .then(Commands.literal("set")
                                 .requires(src -> src.hasPermission(2))
                                 .then(Commands.argument("player", EntityArgument.player())
@@ -92,6 +101,7 @@ public final class RewardCommand {
                                 )
                         )
 
+                        // ---- reset <player> <type> ----
                         .then(Commands.literal("reset")
                                 .requires(src -> src.hasPermission(2))
                                 .then(Commands.argument("player", EntityArgument.player())
@@ -123,6 +133,13 @@ public final class RewardCommand {
                                         )
                                 )
                         )
+        );
+
+        // ====== zentraler Namespace: /evolutionboost rewards ... ======
+        d.register(Commands.literal("evolutionboost")
+                .then(Commands.literal("rewards")
+                        .redirect(d.getRoot().getChild("rewards"))
+                )
         );
     }
 }

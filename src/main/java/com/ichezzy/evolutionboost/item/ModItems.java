@@ -1,6 +1,7 @@
 package com.ichezzy.evolutionboost.item;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.ticket.TicketManager;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -44,14 +45,14 @@ public final class ModItems {
 
     public static final Item HALLOWEEN_BUNDLE = register(
             "halloween_bundle",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
-                    "tooltip.evolutionboost.halloween_bundle")
+            new HalloweenBundleItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON))
     );
 
+    // FUNKTIONALES Ticket (60 Minuten Session, Teleport + Adventure + Auto-Return)
     public static final Item HALLOWEEN_TICKET = register(
             "halloween_ticket",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
-                    "tooltip.evolutionboost.halloween_ticket")
+            new TicketItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    TicketManager.Target.HALLOWEEN, 3600L * 20L)
     );
 
     public static final Item HALLOWEEN25_BRONZE = register(
@@ -79,10 +80,11 @@ public final class ModItems {
                     "tooltip.evolutionboost.shiny_charm")
     );
 
+    // FUNKTIONALES Ticket (60 Minuten)
     public static final Item SAFARI_TICKET = register(
             "safari_ticket",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
-                    "tooltip.evolutionboost.safari_ticket")
+            new TicketItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    TicketManager.Target.SAFARI, 3600L * 20L)
     );
 
     public static final Item EVENT_VOUCHER_BLANK = register(

@@ -2,7 +2,7 @@ package com.ichezzy.evolutionboost.compat.cobblemon;
 
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
-import com.ichezzy.evolutionboost.world.HalloweenWeatherHook;
+import com.ichezzy.evolutionboost.dimension.HalloweenWeatherHook;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
