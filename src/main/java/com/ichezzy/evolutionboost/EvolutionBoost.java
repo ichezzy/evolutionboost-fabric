@@ -4,6 +4,7 @@ import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.EventTpCommand;
 import com.ichezzy.evolutionboost.command.HalloweenCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
+import com.ichezzy.evolutionboost.command.DebugCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
@@ -70,6 +71,7 @@ public class EvolutionBoost implements ModInitializer {
             com.ichezzy.evolutionboost.command.BoostCommand.register();
             EventTpCommand.register(d);
             HalloweenCommand.register(d);
+            DebugCommand.register(d);
 
             // zentrale Wrapper unter /evolutionboost
             d.register(Commands.literal("evolutionboost")

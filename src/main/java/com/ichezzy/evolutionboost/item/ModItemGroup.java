@@ -28,7 +28,13 @@ public final class ModItemGroup {
 
                             // Halloween
                             output.accept(ModItems.HALLOWEEN_CANDY);
+                            output.accept(ModItems.HALLOWEEN_CANDY_BLUE);
+                            output.accept(ModItems.HALLOWEEN_CANDY_PURPLE);
+                            output.accept(ModItems.HALLOWEEN_CANDY_RED);
                             output.accept(ModItems.HALLOWEEN_BLOOD_VIAL);
+                            output.accept(ModItems.HALLOWEEN_PUMPKIN_COOKIE);
+                            output.accept(ModItems.HALLOWEEN_SKELETON_COOKIE);
+                            output.accept(ModItems.HALLOWEEN_ZOMBIE_COOKIE);
                             output.accept(ModItems.HALLOWEEN_BUNDLE);
                             output.accept(ModItems.HALLOWEEN_TICKET);
                             output.accept(ModItems.HALLOWEEN25_BRONZE);
