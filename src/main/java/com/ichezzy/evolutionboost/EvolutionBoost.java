@@ -2,16 +2,12 @@ package com.ichezzy.evolutionboost;
 
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.EventTpCommand;
-import com.ichezzy.evolutionboost.command.HalloweenCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
-import com.ichezzy.evolutionboost.command.DebugCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.ticket.TicketManager;
-import com.ichezzy.evolutionboost.dimension.DimensionTimeHook;
-import com.ichezzy.evolutionboost.dimension.HalloweenWeatherHook;
 
 import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.api.ModInitializer;
@@ -38,6 +34,8 @@ public class EvolutionBoost implements ModInitializer {
         ModItems.registerAll();
         ModItemGroup.register();
 
+        com.ichezzy.evolutionboost.dimension.HalloweenTimeLock.init();
+
         // Server start
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             RewardManager.init(server);
@@ -49,9 +47,7 @@ public class EvolutionBoost implements ModInitializer {
             } else {
                 LOGGER.warn("Cobblemon not detected – hooks skipped");
             }
-
-            HalloweenWeatherHook.init(server);
-            DimensionTimeHook.init(server);
+            
             TicketManager.init(server);
         });
 
@@ -70,8 +66,6 @@ public class EvolutionBoost implements ModInitializer {
             RewardCommand.register(d);
             com.ichezzy.evolutionboost.command.BoostCommand.register();
             EventTpCommand.register(d);
-            HalloweenCommand.register(d);
-            DebugCommand.register(d);
 
             // zentrale Wrapper unter /evolutionboost
             d.register(Commands.literal("evolutionboost")

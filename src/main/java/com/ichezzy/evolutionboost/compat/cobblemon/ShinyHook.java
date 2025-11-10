@@ -2,7 +2,9 @@ package com.ichezzy.evolutionboost.compat.cobblemon;
 
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
-import com.ichezzy.evolutionboost.dimension.HalloweenWeatherHook;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,6 +22,20 @@ public final class ShinyHook {
     /** TEST: Fürs Debuggen hart x100 – danach bitte wieder auf false setzen. */
     private static final boolean TEST_FORCE_MULT = false;
     private static final double  TEST_MULT_VALUE = 100.0;
+
+    // Ziel-Dimension für x2-Boost (statt HalloweenWeatherHook)
+    private static final ResourceKey<net.minecraft.world.level.Level> HALLOWEEN_DIM =
+            ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("event", "halloween"));
+
+    /** true, wenn Spieler in event:halloween steht. */
+    private static boolean shinyBoostActiveFor(ServerPlayer player) {
+        return player != null && player.serverLevel() != null && player.serverLevel().dimension().equals(HALLOWEEN_DIM);
+    }
+
+    /** true, wenn die Welt event:halloween ist. */
+    private static boolean shinyBoostActiveIn(ServerLevel level) {
+        return level != null && level.dimension().equals(HALLOWEEN_DIM);
+    }
 
     public static void register(MinecraftServer server, Class<?> clsEvents, Object priority) {
         // Event: SHINY_CHANCE_CALCULATION
@@ -55,17 +71,16 @@ public final class ShinyHook {
                                 try { player = (ServerPlayer) args[1]; } catch (Throwable ignored) {}
 
                                 double effective = capturedBase;
-                                // x2 nur, wenn Halloween-Sturm aktiv + Spieler in der Halloween-Dimension
+                                // x2 nur, wenn Spieler in event:halloween
                                 try {
-                                    if (player != null && HalloweenWeatherHook.shinyBoostActiveFor(player)) {
+                                    if (player != null && shinyBoostActiveFor(player)) {
                                         effective *= 2.0;
                                     }
-                                } catch (Throwable ignored) { /* Hook optional */ }
+                                } catch (Throwable ignored) { /* optional */ }
 
                                 float out = (float) Math.max(0.0, current * (float) effective);
-                                return out; // autobox to Float OK
+                                return out; // autobox to Float
                             }
-                            // Object method handling for proxy robustness
                             if ("equals".equals(name)) return proxy == args[0];
                             if ("hashCode".equals(name)) return System.identityHashCode(proxy);
                             if ("toString".equals(name)) return "Function3Proxy(ShinyChance)";
@@ -114,7 +129,7 @@ public final class ShinyHook {
                     double effective = capturedBase;
                     try {
                         Object levelObj = clsPokemonEntity.getMethod("level").invoke(entity);
-                        if (levelObj instanceof ServerLevel sl && HalloweenWeatherHook.shinyBoostActiveIn(sl)) {
+                        if (levelObj instanceof ServerLevel sl && shinyBoostActiveIn(sl)) {
                             effective *= 2.0;
                         }
                     } catch (Throwable ignored) { /* optional */ }
