@@ -1,19 +1,23 @@
 package com.ichezzy.evolutionboost.mixin;
 
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
-import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ImmutableStringReader;
+import com.mojang.brigadier.ParseResults;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Hookt zentral Brigadiers CommandDispatcher.
+ * Hookt zentral Brigadiers CommandDispatcher (stabil für Mojang-Mappings).
  * Wir greifen beide execute-Overloads ab und loggen davor/danach.
- * Hinweis: Wir targeten über "targets" statt Klassenname, um mappings-agnostisch zu bleiben.
+ *
+ * WICHTIG:
+ * - value statt targets -> vermeidet die Warnung bei public Klassen.
+ * - remap=false -> Brigadier ist eine externe Library, nicht remappen.
  */
-@Mixin(targets = "com.mojang.brigadier.CommandDispatcher")
+@Mixin(value = CommandDispatcher.class, remap = false)
 public abstract class CommandManagerMixin {
 
     // execute(String input, S source) -> int
@@ -31,18 +35,18 @@ public abstract class CommandManagerMixin {
     // execute(ParseResults<S> parseResults) -> int
     @Inject(method = "execute(Lcom/mojang/brigadier/ParseResults;)I", at = @At("HEAD"))
     private void evo$headExecuteParsed(ParseResults<?> results, CallbackInfoReturnable<Integer> cir) {
-        ImmutableStringReader reader = results.getReader();
+        ImmutableStringReader reader = results.getReader(); // in Brigadier 1.21-Umfeld ist das ImmutableStringReader
         String input = reader != null ? reader.getString() : "";
-        Object source = (results.getContext() != null) ? results.getContext().getSource() : null;
-        CommandLogManager.logBefore(CommandLogManager.tryToStack(source), input);
+        Object src = results.getContext() != null ? results.getContext().getSource() : null;
+        CommandLogManager.logBefore(CommandLogManager.tryToStack(src), input);
     }
 
     @Inject(method = "execute(Lcom/mojang/brigadier/ParseResults;)I", at = @At("RETURN"))
     private void evo$tailExecuteParsed(ParseResults<?> results, CallbackInfoReturnable<Integer> cir) {
         ImmutableStringReader reader = results.getReader();
         String input = reader != null ? reader.getString() : "";
-        Object source = (results.getContext() != null) ? results.getContext().getSource() : null;
+        Object src = results.getContext() != null ? results.getContext().getSource() : null;
         boolean success = cir.getReturnValue() > 0;
-        CommandLogManager.logAfter(CommandLogManager.tryToStack(source), input, cir.getReturnValue(), success);
+        CommandLogManager.logAfter(CommandLogManager.tryToStack(src), input, cir.getReturnValue(), success);
     }
 }

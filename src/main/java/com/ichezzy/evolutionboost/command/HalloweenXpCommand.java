@@ -1,53 +1,71 @@
-package com.ichezzy.evolutionboost.command;
+package com.ichezzy.evolutionboost.compat.cobblemon;
 
-import com.ichezzy.evolutionboost.compat.cobblemon.XpHook;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
+import com.ichezzy.evolutionboost.EvolutionBoost;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 
-public final class HalloweenXpCommand {
-    private HalloweenXpCommand() {}
+/**
+ * Minimaler Kompat-Hook für Halloween-XP:
+ * - Toggle: setHalloweenXpEnabled / isHalloweenXpEnabled
+ * - Debug:  setDebug / isDebug
+ * - applyXpMultiplier(...) kann von deinen Cobblemon-Hooks aufgerufen werden,
+ *   um XP dynamisch (z. B. x2) zu skalieren, wenn der Spieler in event:halloween ist.
+ */
+public final class XpHook {
+    private static volatile boolean halloweenXpEnabled = false;
+    private static volatile boolean debug = false;
 
-    public static void register() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, env) -> register(dispatcher));
+    private XpHook() {}
+
+    // ---------------------------
+    // Public API (vom Command genutzt)
+    // ---------------------------
+    public static void setHalloweenXpEnabled(boolean enabled) {
+        halloweenXpEnabled = enabled;
+        if (debug) {
+            EvolutionBoost.LOGGER.info("[{}] Halloween XP enabled = {}", EvolutionBoost.MOD_ID, enabled);
+        }
     }
 
-    public static void register(CommandDispatcher<CommandSourceStack> d) {
-        d.register(Commands.literal("halloweenxp").requires(src -> src.hasPermission(2))
-                .then(Commands.literal("on").executes(ctx -> {
-                    XpHook.setHalloweenXpEnabled(true);
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EvolutionBoost] Halloween XP: ON (x2 in event:halloween)"), true);
-                    return 1;
-                }))
-                .then(Commands.literal("off").executes(ctx -> {
-                    XpHook.setHalloweenXpEnabled(false);
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EvolutionBoost] Halloween XP: OFF"), true);
-                    return 1;
-                }))
-                .then(Commands.literal("status").executes(ctx -> {
-                    boolean on = XpHook.isHalloweenXpEnabled();
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EvolutionBoost] Halloween XP status: " + (on ? "ON" : "OFF")), false);
-                    return on ? 1 : 0;
-                }))
-                .then(Commands.literal("debug")
-                        .then(Commands.literal("on").executes(ctx -> {
-                            XpHook.setDebug(true);
-                            ctx.getSource().sendSuccess(() -> Component.literal("[EvolutionBoost] Halloween XP DEBUG: ON"), true);
-                            return 1;
-                        }))
-                        .then(Commands.literal("off").executes(ctx -> {
-                            XpHook.setDebug(false);
-                            ctx.getSource().sendSuccess(() -> Component.literal("[EvolutionBoost] Halloween XP DEBUG: OFF"), true);
-                            return 1;
-                        }))
-                        .then(Commands.literal("status").executes(ctx -> {
-                            boolean dbg = XpHook.isDebug();
-                            ctx.getSource().sendSuccess(() -> Component.literal("[EvolutionBoost] Halloween XP DEBUG status: " + (dbg ? "ON" : "OFF")), false);
-                            return dbg ? 1 : 0;
-                        }))
-                )
-        );
+    public static boolean isHalloweenXpEnabled() {
+        return halloweenXpEnabled;
+    }
+
+    public static void setDebug(boolean dbg) {
+        debug = dbg;
+        EvolutionBoost.LOGGER.info("[{}] Halloween XP DEBUG = {}", EvolutionBoost.MOD_ID, dbg);
+    }
+
+    public static boolean isDebug() {
+        return debug;
+    }
+
+    // ---------------------------
+    // Helfer für XP-Skalierung (optional nutzen)
+    // ---------------------------
+    /**
+     * Wende den Halloween-Multiplikator an (derzeit x2), falls:
+     *  - Feature ist eingeschaltet UND
+     *  - Spieler befindet sich in Dimension "event:halloween"
+     */
+    public static int applyXpMultiplier(ServerPlayer player, int baseXp) {
+        if (!halloweenXpEnabled || player == null) return baseXp;
+
+        ResourceLocation dim = player.serverLevel().dimension().location();
+        boolean inHalloween = "event".equals(dim.getNamespace()) && "halloween".equals(dim.getPath());
+
+        int result = inHalloween ? baseXp * 2 : baseXp;
+
+        if (debug) {
+            EvolutionBoost.LOGGER.info(
+                    "[{}] XP hook -> player={}, dim={}, baseXp={}, result={}",
+                    EvolutionBoost.MOD_ID,
+                    player.getGameProfile().getName(),
+                    dim,
+                    baseXp,
+                    result
+            );
+        }
+        return result;
     }
 }
