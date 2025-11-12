@@ -28,11 +28,24 @@ public class CommandLogManager {
         }
     }
 
+    /**
+     * Erstellt eine neue Logdatei. Dateiname: YYYY-MM-DD.txt
+     * Falls die Datei für das aktuelle Datum bereits existiert, wird automatisch
+     * ein Suffix angehängt: YYYY-MM-DD(2).txt, YYYY-MM-DD(3).txt, ...
+     */
     public static void openNewFile() {
         synchronized (LOCK) {
             close();
-            String base = OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-            Path file = CommandLogConfig.logsDir().resolve(base + ".log");
+            final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            final String baseName = DATE.format(OffsetDateTime.now());
+            Path dir = CommandLogConfig.logsDir();
+
+            Path file = dir.resolve(baseName + ".txt");
+            int i = 2;
+            while (Files.exists(file)) {
+                file = dir.resolve(baseName + "(" + i + ").txt");
+                i++;
+            }
             try {
                 writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
             } catch (IOException e) {

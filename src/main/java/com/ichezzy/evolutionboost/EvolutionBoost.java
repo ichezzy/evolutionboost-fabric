@@ -3,6 +3,7 @@ package com.ichezzy.evolutionboost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.EventTpCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
+// import com.ichezzy.evolutionboost.command.HalloweenXpCommand; // entfernt – ist kein echtes Command
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
@@ -37,7 +38,6 @@ public class EvolutionBoost implements ModInitializer {
 
         // Sonstige bisherige Initialisierungen
         com.ichezzy.evolutionboost.dimension.HalloweenTimeLock.init();
-        com.ichezzy.evolutionboost.command.HalloweenXpCommand.register();
 
         // --- Logging so früh wie möglich aktivieren ---
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
@@ -65,13 +65,21 @@ public class EvolutionBoost implements ModInitializer {
             RewardCommand.register(d);
             com.ichezzy.evolutionboost.command.BoostCommand.register();
             EventTpCommand.register(d);
+            // HalloweenXpCommand.register(d); // entfällt – HalloweenXpCommand hat keine register-Methode
 
-            // zentrale Wrapper unter /evolutionboost
-            d.register(Commands.literal("evolutionboost")
-                    .then(Commands.literal("halloween").redirect(d.getRoot().getChild("halloween")))
-                    .then(Commands.literal("event").redirect(d.getRoot().getChild("event")))   // alias für EventTpCommand
-                    .then(Commands.literal("rewards").redirect(d.getRoot().getChild("rewards")))
-            );
+            // zentrale Wrapper unter /evolutionboost (nur redirecten, wenn Ziel vorhanden)
+            var root = d.getRoot();
+            var evo  = Commands.literal("evolutionboost");
+
+            // KEIN "halloween"-Redirect, solange es kein echtes Command "halloween" gibt
+            if (root.getChild("event") != null) {
+                evo.then(Commands.literal("event").redirect(root.getChild("event")));   // alias für EventTpCommand
+            }
+            if (root.getChild("rewards") != null) {
+                evo.then(Commands.literal("rewards").redirect(root.getChild("rewards")));
+            }
+
+            d.register(evo);
         });
 
         // persist / cleanup

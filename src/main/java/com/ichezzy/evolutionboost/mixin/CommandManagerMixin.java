@@ -2,51 +2,48 @@ package com.ichezzy.evolutionboost.mixin;
 
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.ImmutableStringReader;
 import com.mojang.brigadier.ParseResults;
+import net.minecraft.commands.CommandSourceStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
- * Hookt zentral Brigadiers CommandDispatcher (stabil für Mojang-Mappings).
- * Wir greifen beide execute-Overloads ab und loggen davor/danach.
- *
- * WICHTIG:
- * - value statt targets -> vermeidet die Warnung bei public Klassen.
- * - remap=false -> Brigadier ist eine externe Library, nicht remappen.
- */
 @Mixin(value = CommandDispatcher.class, remap = false)
-public abstract class CommandManagerMixin {
+public abstract class CommandManagerMixin<S> {
 
-    // execute(String input, S source) -> int
-    @Inject(method = "execute(Ljava/lang/String;Ljava/lang/Object;)I", at = @At("HEAD"))
-    private void evo$headExecuteString(String input, Object source, CallbackInfoReturnable<Integer> cir) {
-        CommandLogManager.logBefore(CommandLogManager.tryToStack(source), input);
+    // execute(ParseResults<S>)I
+    @Inject(method = "execute(Lcom/mojang/brigadier/ParseResults;)I", at = @At("TAIL"))
+    private void evolutionboost$afterExecuteParse(ParseResults<S> parse, CallbackInfoReturnable<Integer> cir) {
+        final int result = cir.getReturnValue();
+        final boolean success = result >= 0;
+
+        S src = parse.getContext().getSource();
+        CommandSourceStack css = null;
+        if (src instanceof CommandSourceStack) {
+            css = (CommandSourceStack) src;
+        } else {
+            // Fallback (sollte praktisch nicht nötig sein, aber sicher ist sicher)
+            css = CommandLogManager.tryToStack(src);
+        }
+
+        final String input = parse.getReader().getString(); // vollständiger String inkl. führendem "/"
+        CommandLogManager.logAfter(css, input, result, success);
     }
 
-    @Inject(method = "execute(Ljava/lang/String;Ljava/lang/Object;)I", at = @At("RETURN"))
-    private void evo$tailExecuteString(String input, Object source, CallbackInfoReturnable<Integer> cir) {
-        boolean success = cir.getReturnValue() > 0;
-        CommandLogManager.logAfter(CommandLogManager.tryToStack(source), input, cir.getReturnValue(), success);
-    }
+    // execute(String, S)I
+    @Inject(method = "execute(Ljava/lang/String;Ljava/lang/Object;)I", at = @At("TAIL"))
+    private void evolutionboost$afterExecuteString(String input, Object source, CallbackInfoReturnable<Integer> cir) {
+        final int result = cir.getReturnValue();
+        final boolean success = result >= 0;
 
-    // execute(ParseResults<S> parseResults) -> int
-    @Inject(method = "execute(Lcom/mojang/brigadier/ParseResults;)I", at = @At("HEAD"))
-    private void evo$headExecuteParsed(ParseResults<?> results, CallbackInfoReturnable<Integer> cir) {
-        ImmutableStringReader reader = results.getReader(); // in Brigadier 1.21-Umfeld ist das ImmutableStringReader
-        String input = reader != null ? reader.getString() : "";
-        Object src = results.getContext() != null ? results.getContext().getSource() : null;
-        CommandLogManager.logBefore(CommandLogManager.tryToStack(src), input);
-    }
+        CommandSourceStack css = null;
+        if (source instanceof CommandSourceStack) {
+            css = (CommandSourceStack) source;
+        } else {
+            css = CommandLogManager.tryToStack(source);
+        }
 
-    @Inject(method = "execute(Lcom/mojang/brigadier/ParseResults;)I", at = @At("RETURN"))
-    private void evo$tailExecuteParsed(ParseResults<?> results, CallbackInfoReturnable<Integer> cir) {
-        ImmutableStringReader reader = results.getReader();
-        String input = reader != null ? reader.getString() : "";
-        Object src = results.getContext() != null ? results.getContext().getSource() : null;
-        boolean success = cir.getReturnValue() > 0;
-        CommandLogManager.logAfter(CommandLogManager.tryToStack(src), input, cir.getReturnValue(), success);
+        CommandLogManager.logAfter(css, input, result, success);
     }
 }

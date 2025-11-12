@@ -1,4 +1,4 @@
-package com.ichezzy.evolutionboost.compat.cobblemon;
+package com.ichezzy.evolutionboost.command;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import net.minecraft.resources.ResourceLocation;
@@ -11,11 +11,11 @@ import net.minecraft.server.level.ServerPlayer;
  * - applyXpMultiplier(...) kann von deinen Cobblemon-Hooks aufgerufen werden,
  *   um XP dynamisch (z. B. x2) zu skalieren, wenn der Spieler in event:halloween ist.
  */
-public final class XpHook {
+public final class HalloweenXpCommand {
     private static volatile boolean halloweenXpEnabled = false;
     private static volatile boolean debug = false;
 
-    private XpHook() {}
+    private HalloweenXpCommand() {}
 
     // ---------------------------
     // Public API (vom Command genutzt)
