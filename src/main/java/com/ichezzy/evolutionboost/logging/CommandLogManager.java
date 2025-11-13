@@ -1,5 +1,6 @@
 package com.ichezzy.evolutionboost.logging;
 
+import com.ichezzy.evolutionboost.configs.CommandLogConfig;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 

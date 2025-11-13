@@ -1,5 +1,6 @@
 package com.ichezzy.evolutionboost.command;
 
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import com.ichezzy.evolutionboost.ticket.TicketManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
@@ -50,24 +51,46 @@ public final class EventTpCommand {
                     return 1;
                 }))
 
-                // /eventtp <halloween|safari> setspawn
+                // /eventtp halloween setspawn
                 .then(Commands.literal("halloween")
                         .then(Commands.literal("setspawn").executes(ctx -> {
                             ServerPlayer p = ctx.getSource().getPlayerOrException();
                             var pos = p.blockPosition();
+
+                            // 1) Persistenz in main.json
+                            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+                            cfg.putSpawn("halloween", new EvolutionBoostConfig.Spawn(
+                                    p.serverLevel().dimension().location().toString(),
+                                    pos.getX(), pos.getY(), pos.getZ()
+                            ));
+                            EvolutionBoostConfig.save();
+
+                            // 2) Laufzeit: TicketManager informieren
                             TicketManager.setSpawn(TicketManager.Target.HALLOWEEN, pos);
-                            ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Halloween spawn set to " +
-                                    pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
+
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "[EventTP] Halloween spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
                             return 1;
                         }))
                 )
+
+                // /eventtp safari setspawn
                 .then(Commands.literal("safari")
                         .then(Commands.literal("setspawn").executes(ctx -> {
                             ServerPlayer p = ctx.getSource().getPlayerOrException();
                             var pos = p.blockPosition();
+
+                            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+                            cfg.putSpawn("safari", new EvolutionBoostConfig.Spawn(
+                                    p.serverLevel().dimension().location().toString(),
+                                    pos.getX(), pos.getY(), pos.getZ()
+                            ));
+                            EvolutionBoostConfig.save();
+
                             TicketManager.setSpawn(TicketManager.Target.SAFARI, pos);
-                            ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Safari spawn set to " +
-                                    pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
+
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "[EventTP] Safari spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
                             return 1;
                         }))
                 )

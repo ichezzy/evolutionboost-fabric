@@ -7,7 +7,7 @@ import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
-import com.ichezzy.evolutionboost.logging.CommandLogConfig;
+import com.ichezzy.evolutionboost.configs.CommandLogConfig;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.ticket.TicketManager;

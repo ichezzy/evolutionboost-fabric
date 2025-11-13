@@ -1,39 +1,67 @@
 package com.ichezzy.evolutionboost.dimension;
 
+import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.HalloweenConfig;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-/** Fixiert NUR "event:halloween" auf Mitternacht & Vollmond. */
+import java.util.Set;
+
+/**
+ * Hält die Dimension "event:halloween" permanent in Nacht
+ * und verhindert Fortschritt der Tageszeit – ohne Log-Spam.
+ * Debug-Schalter per Config (config/evolutionboost/halloween.json), default: false.
+ */
 public final class HalloweenTimeLock {
+    // Achtung: Mojang 1.21.x – ctor ist privat. Korrekt ist:
+    private static final ResourceLocation HALLOWEEN_DIM = ResourceLocation.fromNamespaceAndPath("event", "halloween");
+    private static final Set<ResourceLocation> TARGETS = Set.of(HALLOWEEN_DIM);
+
+    private static final long NIGHT_TIME = 18000L; // Vanilla-Nacht
+
     private HalloweenTimeLock() {}
 
-    private static final Logger LOG = LoggerFactory.getLogger("EvolutionBoost/HalloweenTimeLock");
-    private static final ResourceLocation HALLOWEEN_DIM_ID =
-            ResourceLocation.fromNamespaceAndPath("event", "halloween");
-
-    private static final long TARGET_TIME = 0L * 24000L + 18000L; // Vollmond-Tag 0 + Mitternacht
-    private static final int  RESET_EVERY_N_TICKS = 5;
-
     public static void init() {
-        ServerTickEvents.END_WORLD_TICK.register((ServerLevel world) -> {
-            // 1) Hook-Check (nur jede Sekunde loggen, um Spam zu vermeiden)
-            if (world.getGameTime() % 20 == 0 && world.dimension().location().equals(HALLOWEEN_DIM_ID)) {
-                LOG.info("Tick in {} (OK). dayTime={}, gameTime={}",
-                        world.dimension().location(), world.getDayTime(), world.getGameTime());
+        // Config laden/erstellen (debug default false)
+        HalloweenConfig.loadOrCreate();
+
+        // Beim Serverstart einmalig Nacht setzen
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            for (ServerLevel level : server.getAllLevels()) {
+                if (isTarget(level)) {
+                    level.setDayTime(NIGHT_TIME);
+                }
+            }
+        });
+
+        // JEDEN Welt-Tick: Nur für Zielwelten Zeit auf 18000 zurücksetzen (Freeze)
+        ServerTickEvents.END_WORLD_TICK.register(level -> {
+            if (!isTarget(level)) return;
+
+            if (level.getDayTime() != NIGHT_TIME) {
+                level.setDayTime(NIGHT_TIME);
             }
 
-            // 2) Nur die Ziel-Dimension manipulieren
-            if (!world.dimension().location().equals(HALLOWEEN_DIM_ID)) return;
-            if (world.getGameTime() % RESET_EVERY_N_TICKS != 0) return;
-
-            // Vollmond + Mitternacht: setze TOTAL dayTime auf ein Vielfaches von 8 Tage + 18000
-            long days = world.getDayTime() / 24000L;
-            long alignedDay = (days - (days % 8L));     // 8er-Multiplikator
-            long absolute = alignedDay * 24000L + 18000L;
-            world.setDayTime(absolute);
+            // Dezent debuggen: alle ~10s (200 Ticks), nur wenn in Config aktiviert
+            if (HalloweenConfig.get().debug) {
+                MinecraftServer server = level.getServer();
+                if (server != null && server.getTickCount() % 200 == 0) {
+                    EvolutionBoost.LOGGER.info(
+                            "[{}] Halloween freeze OK in {} (dayTime={}, gameTime={})",
+                            EvolutionBoost.MOD_ID,
+                            level.dimension().location(),
+                            level.getDayTime(),
+                            level.getGameTime()
+                    );
+                }
+            }
         });
+    }
+
+    private static boolean isTarget(ServerLevel level) {
+        return TARGETS.contains(level.dimension().location());
     }
 }

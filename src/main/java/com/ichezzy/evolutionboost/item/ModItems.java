@@ -14,68 +14,68 @@ public final class ModItems {
     // ---- Coins (nur Platzhalter) ----
     public static final Item EVOLUTION_COIN_BRONZE = register(
             "evolution_coin_bronze",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(999).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.coin_bronze")
     );
 
     public static final Item EVOLUTION_COIN_SILVER = register(
             "evolution_coin_silver",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(999).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.coin_silver")
     );
 
     public static final Item EVOLUTION_COIN_GOLD = register(
             "evolution_coin_gold",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(999).rarity(Rarity.EPIC),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.coin_gold")
     );
 
     // ---- Halloween Platzhalter ----
     public static final Item HALLOWEEN_CANDY = register(
             "halloween_candy",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.halloween_candy")
     );
 
     public static final Item HALLOWEEN_CANDY_BLUE = register(
             "halloween_candy_blue",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.halloween_candy_blue")
     );
 
     public static final Item HALLOWEEN_CANDY_PURPLE = register(
             "halloween_candy_purple",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.halloween_candy_purple")
     );
 
     public static final Item HALLOWEEN_CANDY_RED = register(
             "halloween_candy_red",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.EPIC),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.halloween_candy_red")
     );
 
     public static final Item HALLOWEEN_BLOOD_VIAL = register(
             "halloween_blood_vial",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.COMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(99).rarity(Rarity.COMMON),
                     "tooltip.evolutionboost.halloween_blood_vial")
     );
 
     public static final Item HALLOWEEN_PUMPKIN_COOKIE = register(
             "halloween_pumpkin_cookie",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.EPIC),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.halloween_pumpkin_cookie")
     );
 
     public static final Item HALLOWEEN_SKELETON_COOKIE = register(
             "halloween_skeleton_cookie",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.EPIC),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.halloween_skeleton_cookie")
     );
 
     public static final Item HALLOWEEN_ZOMBIE_COOKIE = register(
             "halloween_zombie_cookie",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.EPIC),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.halloween_zombie_cookie")
     );
 

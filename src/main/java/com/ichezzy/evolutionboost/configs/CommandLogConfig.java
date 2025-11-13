@@ -1,4 +1,4 @@
-package com.ichezzy.evolutionboost.logging;
+package com.ichezzy.evolutionboost.configs;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

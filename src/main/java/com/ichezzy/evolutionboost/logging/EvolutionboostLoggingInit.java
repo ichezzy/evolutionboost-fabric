@@ -1,5 +1,6 @@
 package com.ichezzy.evolutionboost.logging;
 
+import com.ichezzy.evolutionboost.configs.CommandLogConfig;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
