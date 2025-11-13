@@ -36,7 +36,7 @@ public class CommandLogManager {
     public static void openNewFile() {
         synchronized (LOCK) {
             close();
-            final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-dd-MM");
             final String baseName = DATE.format(OffsetDateTime.now());
             Path dir = CommandLogConfig.logsDir();
 

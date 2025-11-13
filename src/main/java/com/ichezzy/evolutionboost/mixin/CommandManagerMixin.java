@@ -1,52 +1,47 @@
 package com.ichezzy.evolutionboost.mixin;
 
-import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.ParseResults;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Hakt sich direkt in Brigadiers Ausführung ein.
- * remap=false, weil Brigadier keine Mojang-Namensgebung hat.
- * Keine generische Mixin-Signatur (vermeidet Target-Mismatches).
+ * Server-seitiger Netzwerkknoten: hier kommen Spieler-Befehle an, bevor sie über Brigadier ausgeführt werden.
+ * Zielmethoden (Mojang-Mappings, MC 1.21.1):
+ *  - performUnsignedChatCommand(String)V   ← zentrale Eingabe von Chat-Commands (ohne Signaturprüfung)
+ *  - handleChatCommand(...)V              ← optionaler zusätzlicher Pfad (Injection ist "soft", require=0)
  */
-@Mixin(value = CommandDispatcher.class, remap = false)
+@Mixin(ServerGamePacketListenerImpl.class)
 public abstract class CommandManagerMixin {
 
-    // execute(ParseResults<?>)I  – zentraler Pfad
-    @Inject(method = "execute(Lcom/mojang/brigadier/ParseResults;)I", at = @At("TAIL"))
-    private void evolutionboost$afterExecuteParse(ParseResults<?> parse, CallbackInfoReturnable<Integer> cir) {
-        final int result = cir.getReturnValue();
-        final boolean success = result >= 0;
+    @Shadow public ServerPlayer player;
 
-        Object src = parse.getContext().getSource();
-        CommandSourceStack css = (src instanceof CommandSourceStack) ? (CommandSourceStack) src
-                : CommandLogManager.tryToStack(src);
+    /**
+     * Wird aufgerufen, wenn ein Spieler einen unsignierten Chat-Command sendet (z. B. "/time set day" → "time set day").
+     * Die Mojang-Mapping-Signatur ist (Ljava/lang/String;)V.
+     */
+    @Inject(method = "performUnsignedChatCommand", at = @At("TAIL"))
+    private void evolutionboost$afterPerformUnsignedChatCommand(String command, CallbackInfo ci) {
+        // Quelle ableiten
+        final CommandSourceStack css = (this.player != null) ? this.player.createCommandSourceStack() : null;
 
-        final String input = parse.getReader().getString(); // inkl. führendem "/"
-        EvolutionBoost.LOGGER.debug("[{}] mixin afterExecute(ParseResults) src={} input='{}' result={}",
-                EvolutionBoost.MOD_ID, (css != null ? css.getTextName() : "null"), input, result);
-
-        CommandLogManager.logAfter(css, input, result, success);
+        // Wir loggen hier unmittelbar nach dem Empfang beim Server.
+        // Exaktes Execution-Resultat ist an dieser Stelle nicht verfügbar → result=1, success=true
+        CommandLogManager.logAfter(css, "/" + command, 1, true);
     }
 
-    // execute(String, Object)I – zusätzliche Aufrufer
-    @Inject(method = "execute(Ljava/lang/String;Ljava/lang/Object;)I", at = @At("TAIL"))
-    private void evolutionboost$afterExecuteString(String input, Object source, CallbackInfoReturnable<Integer> cir) {
-        final int result = cir.getReturnValue();
-        final boolean success = result >= 0;
-
-        CommandSourceStack css = (source instanceof CommandSourceStack) ? (CommandSourceStack) source
-                : CommandLogManager.tryToStack(source);
-
-        EvolutionBoost.LOGGER.debug("[{}] mixin afterExecute(String,Object) src={} input='{}' result={}",
-                EvolutionBoost.MOD_ID, (css != null ? css.getTextName() : "null"), input, result);
-
-        CommandLogManager.logAfter(css, input, result, success);
+    /**
+     * Optionaler zusätzlicher Hook – falls die Server-Implementierung (oder bestimmte Server-Setups)
+     * noch über handleChatCommand(...) gehen. Falls die Methode nicht existiert, greift diese Injection einfach nicht.
+     */
+    @Inject(method = "handleChatCommand", at = @At("TAIL"), require = 0)
+    private void evolutionboost$afterHandleChatCommand(CallbackInfo ci) {
+        // Kein Body nötig – der Hauptweg ist performUnsignedChatCommand(String).
+        // Dieser Fallback bleibt "no-op", wenn die Methode in deiner Laufzeit nicht existiert.
     }
 }
