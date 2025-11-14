@@ -3,7 +3,6 @@ package com.ichezzy.evolutionboost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.EventTpCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
-// import com.ichezzy.evolutionboost.command.HalloweenXpCommand; // entfernt – ist kein echtes Command
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
@@ -11,12 +10,14 @@ import com.ichezzy.evolutionboost.configs.CommandLogConfig;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.ticket.TicketManager;
-import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.commands.CommandBuildContext;
+import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
@@ -36,8 +37,31 @@ public class EvolutionBoost implements ModInitializer {
         ModItems.registerAll();
         ModItemGroup.register();
 
-        // Sonstige bisherige Initialisierungen
+        // Halloween-Zeitlock
         com.ichezzy.evolutionboost.dimension.HalloweenTimeLock.init();
+
+        // ---- Commands: über Fabric-Event registrieren (persistiert über /reload) ----
+        CommandRegistrationCallback.EVENT.register(
+                (CommandDispatcher<CommandSourceStack> d, CommandBuildContext registryAccess, Commands.CommandSelection env) -> {
+                    // Eigentliche Commands
+                    RewardCommand.register(d);
+                    com.ichezzy.evolutionboost.command.BoostCommand.register();
+                    EventTpCommand.register(d);
+
+                    // Zentrale Wrapper unter /evolutionboost (nur Redirects, falls Ziel existiert)
+                    d.register(Commands.literal("evolutionboost")
+                            .then(Commands.literal("halloween").redirect(d.getRoot().getChild("halloween")))
+                            .then(Commands.literal("event").redirect(d.getRoot().getChild("event")))   // alias für EventTpCommand
+                            .then(Commands.literal("rewards").redirect(d.getRoot().getChild("rewards")))
+                    );
+
+                    // Alias: /reward -> /rewards (falls nicht bereits in RewardCommand gesetzt)
+                    if (d.getRoot().getChildren().stream().noneMatch(n -> n.getName().equals("reward"))) {
+                        var rewards = d.getRoot().getChild("rewards");
+                        if (rewards != null) d.register(Commands.literal("reward").redirect(rewards));
+                    }
+                }
+        );
 
         // --- Logging so früh wie möglich aktivieren ---
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
@@ -59,27 +83,6 @@ public class EvolutionBoost implements ModInitializer {
             }
 
             TicketManager.init(server);
-
-            // Commands registrieren
-            CommandDispatcher<CommandSourceStack> d = server.getCommands().getDispatcher();
-            RewardCommand.register(d);
-            com.ichezzy.evolutionboost.command.BoostCommand.register();
-            EventTpCommand.register(d);
-            // HalloweenXpCommand.register(d); // entfällt – HalloweenXpCommand hat keine register-Methode
-
-            // zentrale Wrapper unter /evolutionboost (nur redirecten, wenn Ziel vorhanden)
-            var root = d.getRoot();
-            var evo  = Commands.literal("evolutionboost");
-
-            // KEIN "halloween"-Redirect, solange es kein echtes Command "halloween" gibt
-            if (root.getChild("event") != null) {
-                evo.then(Commands.literal("event").redirect(root.getChild("event")));   // alias für EventTpCommand
-            }
-            if (root.getChild("rewards") != null) {
-                evo.then(Commands.literal("rewards").redirect(root.getChild("rewards")));
-            }
-
-            d.register(evo);
         });
 
         // persist / cleanup
@@ -100,7 +103,8 @@ public class EvolutionBoost implements ModInitializer {
 
     private static void safeUnregister(MinecraftServer server) {
         try {
-            HooksRegistrar.class.getMethod("unregister", MinecraftServer.class).invoke(null, server);
+            com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar.class
+                    .getMethod("unregister", MinecraftServer.class).invoke(null, server);
         } catch (Throwable ignored) {}
         RewardManager.saveAll();
     }

@@ -14,7 +14,7 @@ public final class RewardCommand {
     private RewardCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
-        // ====== /rewards (Legacy-Root) ======
+        // ====== /rewards ======
         d.register(
                 Commands.literal("rewards")
 
@@ -62,39 +62,43 @@ public final class RewardCommand {
                                 }))
                         )
 
-                        // ---- set <player> <role> <true|false> ----
+                        // ---- set <player> <donator|gym> <true|false> ----
                         .then(Commands.literal("set")
                                 .requires(src -> src.hasPermission(2))
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.literal("donator")
                                                 .then(Commands.literal("true").executes(ctx -> {
                                                     ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                                    RewardManager.setMonthlyEligibility(target.getGameProfile().getName(), true, false);
+                                                    RewardManager.setDonatorEligibility(target.getGameProfile().getName(), true);
                                                     ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set DONATOR for ")
-                                                            .append(target.getName()).append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
+                                                            .append(target.getName())
+                                                            .append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
                                                     return 1;
                                                 }))
                                                 .then(Commands.literal("false").executes(ctx -> {
                                                     ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                                    RewardManager.setMonthlyEligibility(target.getGameProfile().getName(), false, false);
+                                                    RewardManager.setDonatorEligibility(target.getGameProfile().getName(), false);
                                                     ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set DONATOR for ")
-                                                            .append(target.getName()).append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
+                                                            .append(target.getName())
+                                                            .append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
                                                     return 1;
                                                 }))
                                         )
                                         .then(Commands.literal("gym")
                                                 .then(Commands.literal("true").executes(ctx -> {
                                                     ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                                    RewardManager.setMonthlyEligibility(target.getGameProfile().getName(), false, true);
+                                                    RewardManager.setGymEligibility(target.getGameProfile().getName(), true);
                                                     ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set GYM for ")
-                                                            .append(target.getName()).append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
+                                                            .append(target.getName())
+                                                            .append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
                                                     return 1;
                                                 }))
                                                 .then(Commands.literal("false").executes(ctx -> {
                                                     ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                                    RewardManager.setMonthlyEligibility(target.getGameProfile().getName(), false, false);
+                                                    RewardManager.setGymEligibility(target.getGameProfile().getName(), false);
                                                     ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set GYM for ")
-                                                            .append(target.getName()).append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
+                                                            .append(target.getName())
+                                                            .append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
                                                     return 1;
                                                 }))
                                         )
@@ -135,7 +139,10 @@ public final class RewardCommand {
                         )
         );
 
-        // ====== zentraler Namespace: /evolutionboost rewards ... ======
+        // ====== Aliasse/Redirects ======
+        // /reward -> /rewards
+        d.register(Commands.literal("reward").redirect(d.getRoot().getChild("rewards")));
+        // /evolutionboost rewards -> /rewards
         d.register(Commands.literal("evolutionboost")
                 .then(Commands.literal("rewards")
                         .redirect(d.getRoot().getChild("rewards"))

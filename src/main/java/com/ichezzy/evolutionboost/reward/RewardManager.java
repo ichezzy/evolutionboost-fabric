@@ -1,5 +1,7 @@
 package com.ichezzy.evolutionboost.reward;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.item.ModItems;
 import net.fabricmc.loader.api.FabricLoader;
@@ -11,48 +13,76 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Rewards mit serverseitiger Realzeit (CET/CEST):
- * DAILY:   Reset täglich 00:00 CET
- * WEEKLY:  Reset montags 00:00 CET
- * MONTHLY: Reset am 1. 00:00 CET
- * Monthly-Eligibility über Namenslisten (case-insensitive).
+ * Rewards mit serverseitiger Realzeit (CET/CEST) + weltgebundener, menschenlesbarer Persistenz.
  */
 public final class RewardManager {
     private RewardManager() {}
 
-    /* ================== Storage ================== */
+    /* ================== Storage / Pfade ================== */
 
     private static final ZoneId ZONE_CET = ZoneId.of("Europe/Berlin");
-    private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            .withZone(ZONE_CET);
+    private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZONE_CET);
 
     private static final Map<UUID, PlayerRewardState> STATE = new ConcurrentHashMap<>();
+    private static final Map<UUID, String> LAST_NAMES = new ConcurrentHashMap<>();
     private static final Set<String> ALLOWED_DONATOR = Collections.synchronizedSet(new HashSet<>());
     private static final Set<String> ALLOWED_GYM     = Collections.synchronizedSet(new HashSet<>());
 
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    private static MinecraftServer SERVER; // gesetzt in init(server)
+
+    // ---- CONFIG-Pfade (Eligibility bleibt vorerst unter /config) ----
     private static Path configDir() {
         return FabricLoader.getInstance().getConfigDir().resolve(EvolutionBoost.MOD_ID);
     }
-    private static Path stateFile()       { return configDir().resolve("rewards_state.json"); }
     private static Path eligibilityFile() { return configDir().resolve("rewards_eligibility.json"); }
 
-    public static void init(net.minecraft.server.MinecraftServer server) {
+    // ---- WORLD-Pfade (STATE) ----
+    private static Path worldRootDir() {
+        if (SERVER == null) {
+            // Fallback (sollte praktisch nicht greifen)
+            return configDir();
+        }
+        // LevelResource.ROOT liefert das Weltwurzelverzeichnis; dort Unterordner "evolutionboost"
+        Path root = SERVER.getWorldPath(LevelResource.ROOT);
+        Path sub  = root.resolve("evolutionboost");
+        try { Files.createDirectories(sub); } catch (IOException ignored) {}
+        return sub;
+    }
+    private static Path stateFileWorld() {
+        return worldRootDir().resolve("rewards_state.json");
+    }
+
+    // Alt: alter Speicherort im Config-Verzeichnis (Semikolon-Format). Dient nur zur Migration.
+    private static Path stateFileLegacyConfig() {
+        return configDir().resolve("rewards_state.json");
+    }
+
+    public static void init(MinecraftServer server) {
+        SERVER = server;
         try { Files.createDirectories(configDir()); } catch (IOException ignored) {}
+
         loadEligibility();
+        migrateLegacyStateIfNeeded();
         loadState();
     }
 
@@ -65,7 +95,9 @@ public final class RewardManager {
 
     /** Login-Hinweise. */
     public static void onPlayerJoin(ServerPlayer p) {
-        STATE.computeIfAbsent(p.getUUID(), id -> new PlayerRewardState());
+        UUID id = p.getUUID();
+        STATE.computeIfAbsent(id, k -> new PlayerRewardState());
+        LAST_NAMES.put(id, safeName(p));
 
         boolean readyDaily   = isReady(p, RewardType.DAILY);
         boolean readyWeekly  = isReady(p, RewardType.WEEKLY);
@@ -118,6 +150,9 @@ public final class RewardManager {
 
     /** Claim-Logik + rote Meldungen bei fehlender Berechtigung. */
     public static boolean claim(ServerPlayer p, RewardType type) {
+        UUID id = p.getUUID();
+        LAST_NAMES.put(id, safeName(p));
+
         if ((type == RewardType.MONTHLY_DONATOR || type == RewardType.MONTHLY_GYM) && !isEligibleMonthly(p, type)) {
             p.sendSystemMessage(Component.literal("[Rewards] You are not eligible for this monthly reward.")
                     .withStyle(ChatFormatting.RED));
@@ -154,7 +189,7 @@ public final class RewardManager {
                 break;
         }
 
-        stampClaim(p.getUUID(), type);
+        stampClaim(id, type);
         p.sendSystemMessage(Component.literal("[Rewards] Claimed ")
                 .append(Component.literal(typeReadable(type)).withStyle(ChatFormatting.GOLD))
                 .append(Component.literal(" at ").withStyle(ChatFormatting.GRAY))
@@ -174,7 +209,7 @@ public final class RewardManager {
     }
 
     /**
-     * NEU: Ready, wenn lastClaim < lastResetBoundary; sonst Cooldown bis nextResetBoundary.
+     * Ready, wenn lastClaim < lastResetBoundary; sonst Cooldown bis nextResetBoundary.
      */
     public static long secondsUntilNext(UUID uuid, RewardType t) {
         PlayerRewardState st = STATE.computeIfAbsent(uuid, id -> new PlayerRewardState());
@@ -197,10 +232,23 @@ public final class RewardManager {
         saveState();
     }
 
+    /** Alte Methode bleibt (kompatibel), überschreibt jedoch beide Rollen auf einmal. */
     public static void setMonthlyEligibility(String playerName, boolean donator, boolean gym) {
+        setDonatorEligibility(playerName, donator);
+        setGymEligibility(playerName, gym);
+    }
+
+    /** Neu: setzt NUR Donator-Flag (ohne Gym zu verändern). */
+    public static void setDonatorEligibility(String playerName, boolean donator) {
         String key = normalizeName(playerName);
         synchronized (ALLOWED_DONATOR) { if (donator) ALLOWED_DONATOR.add(key); else ALLOWED_DONATOR.remove(key); }
-        synchronized (ALLOWED_GYM)     { if (gym)     ALLOWED_GYM.add(key);     else ALLOWED_GYM.remove(key); }
+        saveEligibility();
+    }
+
+    /** Neu: setzt NUR Gym-Flag (ohne Donator zu verändern). */
+    public static void setGymEligibility(String playerName, boolean gym) {
+        String key = normalizeName(playerName);
+        synchronized (ALLOWED_GYM) { if (gym) ALLOWED_GYM.add(key); else ALLOWED_GYM.remove(key); }
         saveEligibility();
     }
 
@@ -218,16 +266,12 @@ public final class RewardManager {
         switch (t) {
             case DAILY: {
                 ZonedDateTime todayMidnight = zdt.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                if (zdt.isBefore(todayMidnight)) {
-                    // vor Mitternacht -> gestern 00:00
-                    return todayMidnight.minusDays(1).toInstant();
-                }
+                if (zdt.isBefore(todayMidnight)) return todayMidnight.minusDays(1).toInstant();
                 return todayMidnight.toInstant();
             }
             case WEEKLY: {
                 ZonedDateTime weekMidnight = zdt.withHour(0).withMinute(0).withSecond(0).withNano(0)
                         .with(java.time.DayOfWeek.MONDAY);
-                // falls heute vor dem heutigen Montag-00:00 liegt -> eine Woche zurück
                 while (zdt.isBefore(weekMidnight)) weekMidnight = weekMidnight.minusWeeks(1);
                 return weekMidnight.toInstant();
             }
@@ -291,9 +335,15 @@ public final class RewardManager {
         return "Monthly (Gym)";
     }
 
+    private static String safeName(ServerPlayer p) {
+        return (p == null || p.getGameProfile() == null) ? "-" : p.getGameProfile().getName();
+    }
+
     private static void stampClaim(UUID uuid, RewardType t) {
         PlayerRewardState st = STATE.computeIfAbsent(uuid, id -> new PlayerRewardState());
-        st.setLast(t, Instant.now());
+        Instant now = Instant.now();
+        st.setLast(t, now);
+        st.addHistory(t, now);
         saveState();
     }
 
@@ -301,7 +351,7 @@ public final class RewardManager {
 
     private static void giveOrDrop(ServerPlayer p, ItemStack stack) {
         if (stack == null || stack.isEmpty()) return;
-        p.getInventory().placeItemBackInInventory(stack); // legt ins Inventar oder droppt davor, wenn voll
+        p.getInventory().placeItemBackInInventory(stack);
     }
 
     private static void giveExternal(ServerPlayer p, String id, int count) {
@@ -318,7 +368,6 @@ public final class RewardManager {
         }
         CompoundTag tag = new CompoundTag();
         tag.putInt("crdkeys_uses", uses);
-        // 1.21.x: CustomData-Komponente statt getOrCreateTag
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
         giveOrDrop(p, s);
     }
@@ -335,7 +384,7 @@ public final class RewardManager {
         }
     }
 
-    /* ================== Persistenz (simpel) ================== */
+    /* ================== Persistenz: Eligibility (unverändert) ================== */
 
     private static void loadEligibility() {
         ALLOWED_DONATOR.clear();
@@ -371,12 +420,17 @@ public final class RewardManager {
         }
     }
 
-    private static void loadState() {
-        STATE.clear();
-        Path p = stateFile();
-        if (!Files.exists(p)) return;
+    /* ================== Persistenz: STATE (weltgebunden, JSON) ================== */
+
+    private static void migrateLegacyStateIfNeeded() {
+        Path legacy = stateFileLegacyConfig();
+        Path world  = stateFileWorld();
+        if (Files.exists(world)) return;           // Weltdatei existiert schon → nichts tun
+        if (!Files.exists(legacy)) return;         // keine Legacy-Datei → nichts tun
+
         try {
-            List<String> lines = Files.readAllLines(p);
+            List<String> lines = Files.readAllLines(legacy, StandardCharsets.UTF_8);
+            // Semikolon-Format → temporär in STATE laden
             for (String line : lines) {
                 String[] parts = line.split(";");
                 if (parts.length < 1) continue;
@@ -388,6 +442,49 @@ public final class RewardManager {
                 if (parts.length > 3 && !parts[3].isEmpty()) st.monthlyDonator = Instant.ofEpochSecond(Long.parseLong(parts[3]));
                 if (parts.length > 4 && !parts[4].isEmpty()) st.monthlyGym     = Instant.ofEpochSecond(Long.parseLong(parts[4]));
                 STATE.put(id, st);
+                LAST_NAMES.putIfAbsent(id, "-");
+            }
+            // direkt in neues JSON schreiben
+            saveState();
+            EvolutionBoost.LOGGER.info("[rewards] Migrated legacy rewards_state.json from /config to <world>/evolutionboost/.");
+        } catch (IOException e) {
+            EvolutionBoost.LOGGER.warn("[rewards] legacy migration failed: {}", e.getMessage());
+        }
+    }
+
+    private static void loadState() {
+        STATE.clear();
+        Path p = stateFileWorld();
+        if (!Files.exists(p)) return;
+        try (BufferedReader br = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
+            RewardData data = GSON.fromJson(br, RewardData.class);
+            if (data == null || data.players == null) return;
+
+            for (RewardData.PlayerEntry pe : data.players) {
+                if (pe == null || pe.uuid == null || pe.uuid.isEmpty()) continue;
+                UUID id;
+                try { id = UUID.fromString(pe.uuid); } catch (IllegalArgumentException ex) { continue; }
+                PlayerRewardState st = new PlayerRewardState();
+
+                if (pe.last != null) {
+                    st.daily          = parseInstant(pe.last.get("DAILY"));
+                    st.weekly         = parseInstant(pe.last.get("WEEKLY"));
+                    st.monthlyDonator = parseInstant(pe.last.get("MONTHLY_DONATOR"));
+                    st.monthlyGym     = parseInstant(pe.last.get("MONTHLY_GYM"));
+                }
+                if (pe.claims != null) {
+                    for (RewardData.Claim c : pe.claims) {
+                        if (c == null || c.type == null || c.at == null) continue;
+                        try {
+                            RewardType t = RewardType.valueOf(c.type);
+                            Instant at = Instant.parse(c.at);
+                            st.history.add(new HistoryEntry(t, at));
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                STATE.put(id, st);
+                LAST_NAMES.put(id, pe.name == null ? "-" : pe.name);
             }
         } catch (IOException e) {
             EvolutionBoost.LOGGER.warn("[rewards] failed to load state: {}", e.getMessage());
@@ -396,56 +493,81 @@ public final class RewardManager {
 
     private static void saveState() {
         try {
-            Files.createDirectories(configDir());
-            List<String> out = new ArrayList<>();
+            Files.createDirectories(worldRootDir());
+
+            RewardData out = new RewardData();
             for (Map.Entry<UUID, PlayerRewardState> e : STATE.entrySet()) {
+                UUID id = e.getKey();
                 PlayerRewardState st = e.getValue();
-                out.add(String.join(";",
-                        e.getKey().toString(),
-                        st.daily == null ? "" : String.valueOf(st.daily.getEpochSecond()),
-                        st.weekly == null ? "" : String.valueOf(st.weekly.getEpochSecond()),
-                        st.monthlyDonator == null ? "" : String.valueOf(st.monthlyDonator.getEpochSecond()),
-                        st.monthlyGym == null ? "" : String.valueOf(st.monthlyGym.getEpochSecond())
-                ));
+
+                RewardData.PlayerEntry pe = new RewardData.PlayerEntry();
+                pe.uuid = id.toString();
+                pe.name = LAST_NAMES.getOrDefault(id, "-");
+                pe.last = new LinkedHashMap<>();
+
+                if (st.daily          != null) pe.last.put("DAILY",            st.daily.toString());
+                if (st.weekly         != null) pe.last.put("WEEKLY",           st.weekly.toString());
+                if (st.monthlyDonator != null) pe.last.put("MONTHLY_DONATOR",  st.monthlyDonator.toString());
+                if (st.monthlyGym     != null) pe.last.put("MONTHLY_GYM",      st.monthlyGym.toString());
+
+                if (!st.history.isEmpty()) {
+                    pe.claims = new ArrayList<>(st.history.size());
+                    for (HistoryEntry h : st.history) {
+                        pe.claims.add(new RewardData.Claim(h.type.name(), h.at.toString()));
+                    }
+                }
+
+                out.players.add(pe);
             }
-            Files.write(stateFile(), out);
+
+            Path file = stateFileWorld();
+            try (BufferedWriter bw = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                GSON.toJson(out, bw);
+            }
         } catch (IOException e) {
             EvolutionBoost.LOGGER.warn("[rewards] failed to save state: {}", e.getMessage());
         }
     }
 
+    private static Instant parseInstant(String s) {
+        try { return (s == null || s.isEmpty()) ? null : Instant.parse(s); }
+        catch (Exception ex) { return null; }
+    }
+
     // Liste der Rollen im Chat ausgeben: /rewards list <donator|gym>
-    public static void sendRoleList(net.minecraft.commands.CommandSourceStack src, String roleKey) {
-        final java.util.Set<String> names;
+    public static void sendRoleList(CommandSourceStack src, String roleKey) {
+        final Set<String> names;
         if ("donator".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_DONATOR;
         } else if ("gym".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_GYM;
         } else {
-            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("[Rewards] Unknown role: " + roleKey)
-                    .withStyle(net.minecraft.ChatFormatting.RED), false);
+            src.sendSuccess(() -> Component.literal("[Rewards] Unknown role: " + roleKey)
+                    .withStyle(ChatFormatting.RED), false);
             return;
         }
 
         if (names.isEmpty()) {
-            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("[Rewards] No entries for '" + roleKey + "'.")
-                    .withStyle(net.minecraft.ChatFormatting.GRAY, net.minecraft.ChatFormatting.ITALIC), false);
+            src.sendSuccess(() -> Component.literal("[Rewards] No entries for '" + roleKey + "'.")
+                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
             return;
         }
 
         String joined = String.join(", ", names);
-        src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("[Rewards] " + roleKey + ": " + joined)
-                .withStyle(net.minecraft.ChatFormatting.GRAY, net.minecraft.ChatFormatting.ITALIC), false);
+        src.sendSuccess(() -> Component.literal("[Rewards] " + roleKey + ": " + joined)
+                .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
     }
 
-
-    /* ================== State ================== */
+    /* ================== Interner State ================== */
 
     private static final class PlayerRewardState {
         Instant daily;
         Instant weekly;
         Instant monthlyDonator;
         Instant monthlyGym;
+
+        final List<HistoryEntry> history = new ArrayList<>();
 
         Instant getLast(RewardType t) {
             switch (t) {
@@ -471,6 +593,17 @@ public final class RewardManager {
                 case MONTHLY_DONATOR: monthlyDonator = null; break;
                 case MONTHLY_GYM: monthlyGym = null; break;
             }
+        }
+        void addHistory(RewardType t, Instant at) {
+            history.add(new HistoryEntry(t, at));
+        }
+    }
+
+    private static final class HistoryEntry {
+        final RewardType type;
+        final Instant at;
+        HistoryEntry(RewardType type, Instant at) {
+            this.type = type; this.at = at;
         }
     }
 }
