@@ -14,8 +14,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Globale EvolutionBoost-Config (main.json)
- * Pfad: /config/evolutionboost/main.json
+ * Globale EvolutionBoost-Config (evolutionboost.json)
+ * Pfad: /config/evolutionboost/evolutionboost.json
  *
  * Beinhaltet u. a. Event-Spawns (z. B. "halloween", "safari") und Platz für weitere Basiseinstellungen.
  */
@@ -30,11 +30,7 @@ public final class EvolutionBoostConfig {
             this.dimension = dimension;
             this.x = x; this.y = y; this.z = z;
         }
-
-        public ResourceLocation dimensionId() {
-            // Mojang 1.21: Factory statt ctor
-            return ResourceLocation.parse(dimension);
-        }
+        public ResourceLocation dimensionId() { return ResourceLocation.parse(dimension); }
         public BlockPos toBlockPos() { return new BlockPos(x, y, z); }
     }
 
@@ -42,9 +38,9 @@ public final class EvolutionBoostConfig {
     public Map<String, Spawn> eventSpawns = new LinkedHashMap<>();
 
     /** Platzhalter für spätere globale Einstellungen */
-    public double maxBoostMultiplier = 10.0;          // Beispiel
-    public boolean shinyCharmEnabled = false;         // Beispiel
-    public int shinyCharmTargetOdds = 2048;           // Beispiel (1:2048)
+    public double maxBoostMultiplier = 10.0;
+    public boolean shinyCharmEnabled = false;
+    public int shinyCharmTargetOdds = 2048;
 
     private static volatile EvolutionBoostConfig INSTANCE;
 
@@ -97,7 +93,7 @@ public final class EvolutionBoostConfig {
         try {
             Path dir = Path.of("config", "evolutionboost");
             Files.createDirectories(dir);
-            Path file = dir.resolve("main.json");
+            Path file = dir.resolve("evolutionboost.json");
             try (BufferedWriter bw = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
                 GSON.toJson(INSTANCE, bw);
             }
@@ -113,11 +109,6 @@ public final class EvolutionBoostConfig {
         return c;
     }
 
-    public Spawn getSpawn(String key) {
-        return eventSpawns.get(key);
-    }
-
-    public void putSpawn(String key, Spawn spawn) {
-        eventSpawns.put(key, spawn);
-    }
+    public Spawn getSpawn(String key) { return eventSpawns.get(key); }
+    public void putSpawn(String key, Spawn spawn) { eventSpawns.put(key, spawn); }
 }

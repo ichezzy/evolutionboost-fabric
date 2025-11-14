@@ -7,6 +7,8 @@ import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.configs.CommandLogConfig;
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
+import com.ichezzy.evolutionboost.configs.PokedexRewardsConfig;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.ticket.TicketManager;
@@ -40,31 +42,31 @@ public class EvolutionBoost implements ModInitializer {
         // Halloween-Zeitlock
         com.ichezzy.evolutionboost.dimension.HalloweenTimeLock.init();
 
-        // ---- Commands: über Fabric-Event registrieren (persistiert über /reload) ----
+        // ---- Commands über Fabric-Event (persistiert über /reload) ----
         CommandRegistrationCallback.EVENT.register(
                 (CommandDispatcher<CommandSourceStack> d, CommandBuildContext registryAccess, Commands.CommandSelection env) -> {
-                    // Eigentliche Commands
                     RewardCommand.register(d);
                     com.ichezzy.evolutionboost.command.BoostCommand.register();
                     EventTpCommand.register(d);
 
-                    // Zentrale Wrapper unter /evolutionboost (nur Redirects, falls Ziel existiert)
                     d.register(Commands.literal("evolutionboost")
-                            .then(Commands.literal("halloween").redirect(d.getRoot().getChild("halloween")))
-                            .then(Commands.literal("event").redirect(d.getRoot().getChild("event")))   // alias für EventTpCommand
                             .then(Commands.literal("rewards").redirect(d.getRoot().getChild("rewards")))
+                            .then(Commands.literal("event").redirect(d.getRoot().getChild("event")))
                     );
 
-                    // Alias: /reward -> /rewards (falls nicht bereits in RewardCommand gesetzt)
-                    if (d.getRoot().getChildren().stream().noneMatch(n -> n.getName().equals("reward"))) {
+                    if (d.getRoot().getChild("reward") == null) {
                         var rewards = d.getRoot().getChild("rewards");
                         if (rewards != null) d.register(Commands.literal("reward").redirect(rewards));
                     }
                 }
         );
 
-        // --- Logging so früh wie möglich aktivieren ---
+        // --- Logging & Configs früh initialisieren ---
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            // Config-Dateien sicher anlegen
+            EvolutionBoostConfig.loadOrCreate();     // -> /config/evolutionboost/evolutionboost.json
+            PokedexRewardsConfig.loadOrCreate();     // -> /config/evolutionboost/rewards/pokedex_rewards.json
+
             CommandLogConfig cfg = CommandLogConfig.loadOrCreate();
             CommandLogManager.init(cfg);
             LOGGER.info("[{}] Command logging initialized", MOD_ID);
@@ -87,7 +89,7 @@ public class EvolutionBoost implements ModInitializer {
 
         // persist / cleanup
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            CommandLogManager.close(); // Logfile sauber schließen
+            CommandLogManager.close();
             safeUnregister(server);
         });
 

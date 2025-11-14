@@ -7,6 +7,7 @@ import com.ichezzy.evolutionboost.item.ModItems;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
@@ -32,6 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Rewards mit serverseitiger Realzeit (CET/CEST) + weltgebundener, menschenlesbarer Persistenz.
+ * - Eligibility (Properties): /config/evolutionboost/rewards/eligibility.properties
+ * - State (JSON):            <world>/evolutionboost/rewards_state.json
  */
 public final class RewardManager {
     private RewardManager() {}
@@ -50,11 +53,18 @@ public final class RewardManager {
 
     private static MinecraftServer SERVER; // gesetzt in init(server)
 
-    // ---- CONFIG-Pfade (Eligibility bleibt vorerst unter /config) ----
+    // ---- CONFIG-Pfade (Eligibility) unter /config/evolutionboost/rewards/ ----
     private static Path configDir() {
         return FabricLoader.getInstance().getConfigDir().resolve(EvolutionBoost.MOD_ID);
     }
-    private static Path eligibilityFile() { return configDir().resolve("rewards_eligibility.json"); }
+    private static Path rewardsConfigDir() {
+        Path p = configDir().resolve("rewards");
+        try { Files.createDirectories(p); } catch (IOException ignored) {}
+        return p;
+    }
+    private static Path eligibilityFile() {
+        return rewardsConfigDir().resolve("eligibility.properties");
+    }
 
     // ---- WORLD-Pfade (STATE) ----
     private static Path worldRootDir() {
@@ -62,7 +72,7 @@ public final class RewardManager {
             // Fallback (sollte praktisch nicht greifen)
             return configDir();
         }
-        // LevelResource.ROOT liefert das Weltwurzelverzeichnis; dort Unterordner "evolutionboost"
+        // LevelResource.ROOT liefert die Weltwurzel; wir hängen "evolutionboost" darunter
         Path root = SERVER.getWorldPath(LevelResource.ROOT);
         Path sub  = root.resolve("evolutionboost");
         try { Files.createDirectories(sub); } catch (IOException ignored) {}
@@ -232,20 +242,20 @@ public final class RewardManager {
         saveState();
     }
 
-    /** Alte Methode bleibt (kompatibel), überschreibt jedoch beide Rollen auf einmal. */
+    /** Alte Methode (Kompatibilität): ruft die getrennten Setter auf. */
     public static void setMonthlyEligibility(String playerName, boolean donator, boolean gym) {
         setDonatorEligibility(playerName, donator);
         setGymEligibility(playerName, gym);
     }
 
-    /** Neu: setzt NUR Donator-Flag (ohne Gym zu verändern). */
+    /** Setzt NUR das Donator-Flag. */
     public static void setDonatorEligibility(String playerName, boolean donator) {
         String key = normalizeName(playerName);
         synchronized (ALLOWED_DONATOR) { if (donator) ALLOWED_DONATOR.add(key); else ALLOWED_DONATOR.remove(key); }
         saveEligibility();
     }
 
-    /** Neu: setzt NUR Gym-Flag (ohne Donator zu verändern). */
+    /** Setzt NUR das Gym-Flag. */
     public static void setGymEligibility(String playerName, boolean gym) {
         String key = normalizeName(playerName);
         synchronized (ALLOWED_GYM) { if (gym) ALLOWED_GYM.add(key); else ALLOWED_GYM.remove(key); }
@@ -384,16 +394,16 @@ public final class RewardManager {
         }
     }
 
-    /* ================== Persistenz: Eligibility (unverändert) ================== */
+    /* ================== Persistenz: Eligibility (Properties) ================== */
 
     private static void loadEligibility() {
         ALLOWED_DONATOR.clear();
         ALLOWED_GYM.clear();
         Path p = eligibilityFile();
         if (!Files.exists(p)) { saveEligibility(); return; }
-        try {
+        try (var r = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
             Properties props = new Properties();
-            props.load(Files.newBufferedReader(p));
+            props.load(r);
             for (String n : props.getProperty("donator", "").split(",")) {
                 String k = normalizeName(n);
                 if (!k.isEmpty()) ALLOWED_DONATOR.add(k);
@@ -409,12 +419,14 @@ public final class RewardManager {
 
     private static void saveEligibility() {
         try {
-            Files.createDirectories(configDir());
+            Files.createDirectories(rewardsConfigDir());
             Properties props = new Properties();
             props.setProperty("donator", String.join(",", ALLOWED_DONATOR));
             props.setProperty("gym", String.join(",", ALLOWED_GYM));
-            props.store(Files.newBufferedWriter(eligibilityFile()),
-                    "Rewards eligibility (names, case-insensitive)");
+            try (var w = Files.newBufferedWriter(eligibilityFile(), StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                props.store(w, "Rewards eligibility (names, case-insensitive)  |  Syntax:  donator=name1,name2   gym=nameA,nameB");
+            }
         } catch (IOException e) {
             EvolutionBoost.LOGGER.warn("[rewards] failed to save eligibility: {}", e.getMessage());
         }
