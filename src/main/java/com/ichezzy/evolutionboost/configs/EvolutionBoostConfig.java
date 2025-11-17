@@ -14,10 +14,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Globale EvolutionBoost-Config (evolutionboost.json)
- * Pfad: /config/evolutionboost/evolutionboost.json
+ * Globale EvolutionBoost-Config (main.json)
+ * Pfad: /config/evolutionboost/main.json
  *
- * Beinhaltet u. a. Event-Spawns (z. B. "halloween", "safari") und Platz für weitere Basiseinstellungen.
+ * Beinhaltet u. a. Event-Spawns (z. B. "halloween", "safari") und Basiseinstellungen.
  */
 public final class EvolutionBoostConfig {
 
@@ -37,10 +37,13 @@ public final class EvolutionBoostConfig {
     /** z. B. "halloween" -> Spawn, "safari" -> Spawn */
     public Map<String, Spawn> eventSpawns = new LinkedHashMap<>();
 
-    /** Platzhalter für spätere globale Einstellungen */
-    public double maxBoostMultiplier = 10.0;
-    public boolean shinyCharmEnabled = false;
-    public int shinyCharmTargetOdds = 2048;
+    /** Basiseinstellungen */
+    public double  maxBoostMultiplier   = 10.0;
+    public boolean shinyCharmEnabled    = false;
+    public int     shinyCharmTargetOdds = 2048;
+
+    /** NEU: Debug für Halloween-TimeLock in Haupt-Config */
+    public boolean halloweenDebug = false;
 
     private static volatile EvolutionBoostConfig INSTANCE;
 
@@ -93,7 +96,7 @@ public final class EvolutionBoostConfig {
         try {
             Path dir = Path.of("config", "evolutionboost");
             Files.createDirectories(dir);
-            Path file = dir.resolve("evolutionboost.json");
+            Path file = dir.resolve("main.json");
             try (BufferedWriter bw = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
                 GSON.toJson(INSTANCE, bw);
             }
@@ -106,9 +109,10 @@ public final class EvolutionBoostConfig {
         c.maxBoostMultiplier = 10.0;
         c.shinyCharmEnabled = false;
         c.shinyCharmTargetOdds = 2048;
+        c.halloweenDebug = false;
         return c;
     }
 
     public Spawn getSpawn(String key) { return eventSpawns.get(key); }
-    public void putSpawn(String key, Spawn spawn) { eventSpawns.put(key, spawn); }
+    public void  putSpawn(String key, Spawn spawn) { eventSpawns.put(key, spawn); }
 }

@@ -1,7 +1,7 @@
 package com.ichezzy.evolutionboost.dimension;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
-import com.ichezzy.evolutionboost.configs.HalloweenConfig;
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.resources.ResourceLocation;
@@ -13,22 +13,18 @@ import java.util.Set;
 /**
  * Hält die Dimension "event:halloween" permanent in Nacht
  * und verhindert Fortschritt der Tageszeit – ohne Log-Spam.
- * Debug-Schalter per Config (config/evolutionboost/halloween.json), default: false.
  */
 public final class HalloweenTimeLock {
-    // Achtung: Mojang 1.21.x – ctor ist privat. Korrekt ist:
-    private static final ResourceLocation HALLOWEEN_DIM = ResourceLocation.fromNamespaceAndPath("event", "halloween");
+    private static final ResourceLocation HALLOWEEN_DIM = ResourceLocation.parse("event:halloween");
+    // später erweiterbar um weitere Zonen:
     private static final Set<ResourceLocation> TARGETS = Set.of(HALLOWEEN_DIM);
 
-    private static final long NIGHT_TIME = 18000L; // Vanilla-Nacht
+    private static final long NIGHT_TIME = 18000L; // vanilla Nacht
 
     private HalloweenTimeLock() {}
 
     public static void init() {
-        // Config laden/erstellen (debug default false)
-        HalloweenConfig.loadOrCreate();
-
-        // Beim Serverstart einmalig Nacht setzen
+        // Beim Serverstart einmalig alle Zielwelten auf Nacht setzen.
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             for (ServerLevel level : server.getAllLevels()) {
                 if (isTarget(level)) {
@@ -37,7 +33,7 @@ public final class HalloweenTimeLock {
             }
         });
 
-        // JEDEN Welt-Tick: Nur für Zielwelten Zeit auf 18000 zurücksetzen (Freeze)
+        // JEDEN Welt-Tick: Nur für unsere Zielwelten Zeit auf 18000 zurücksetzen.
         ServerTickEvents.END_WORLD_TICK.register(level -> {
             if (!isTarget(level)) return;
 
@@ -45,8 +41,8 @@ public final class HalloweenTimeLock {
                 level.setDayTime(NIGHT_TIME);
             }
 
-            // Dezent debuggen: alle ~10s (200 Ticks), nur wenn in Config aktiviert
-            if (HalloweenConfig.get().debug) {
+            // Debug-Ausgabe aus Haupt-Config steuern
+            if (isDebug(level.getServer())) {
                 MinecraftServer server = level.getServer();
                 if (server != null && server.getTickCount() % 200 == 0) {
                     EvolutionBoost.LOGGER.info(
@@ -59,6 +55,11 @@ public final class HalloweenTimeLock {
                 }
             }
         });
+    }
+
+    private static boolean isDebug(MinecraftServer server) {
+        // liest aus /config/evolutionboost/main.json
+        return EvolutionBoostConfig.get().halloweenDebug;
     }
 
     private static boolean isTarget(ServerLevel level) {

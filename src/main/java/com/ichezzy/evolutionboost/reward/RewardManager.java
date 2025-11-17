@@ -7,7 +7,6 @@ import com.ichezzy.evolutionboost.item.ModItems;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
@@ -48,6 +47,7 @@ public final class RewardManager {
     private static final Map<UUID, String> LAST_NAMES = new ConcurrentHashMap<>();
     private static final Set<String> ALLOWED_DONATOR = Collections.synchronizedSet(new HashSet<>());
     private static final Set<String> ALLOWED_GYM     = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_STAFF   = Collections.synchronizedSet(new HashSet<>());
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -72,7 +72,6 @@ public final class RewardManager {
             // Fallback (sollte praktisch nicht greifen)
             return configDir();
         }
-        // LevelResource.ROOT liefert die Weltwurzel; wir hängen "evolutionboost" darunter
         Path root = SERVER.getWorldPath(LevelResource.ROOT);
         Path sub  = root.resolve("evolutionboost");
         try { Files.createDirectories(sub); } catch (IOException ignored) {}
@@ -113,8 +112,9 @@ public final class RewardManager {
         boolean readyWeekly  = isReady(p, RewardType.WEEKLY);
         boolean readyDonator = isEligibleMonthly(p, RewardType.MONTHLY_DONATOR) && isReady(p, RewardType.MONTHLY_DONATOR);
         boolean readyGym     = isEligibleMonthly(p, RewardType.MONTHLY_GYM)     && isReady(p, RewardType.MONTHLY_GYM);
+        boolean readyStaff   = isEligibleMonthly(p, RewardType.MONTHLY_STAFF)   && isReady(p, RewardType.MONTHLY_STAFF);
 
-        if (readyDaily || readyWeekly || readyDonator || readyGym) {
+        if (readyDaily || readyWeekly || readyDonator || readyGym || readyStaff) {
             p.sendSystemMessage(
                     Component.literal("[REWARDS] You have rewards to claim!")
                             .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD)
@@ -147,6 +147,12 @@ public final class RewardManager {
         } else {
             src.sendSuccess(() -> Component.literal("Monthly (Gym): not eligible").withStyle(ChatFormatting.RED), false);
         }
+
+        if (isEligibleMonthly(p, RewardType.MONTHLY_STAFF)) {
+            sendOneInfo(src, p, RewardType.MONTHLY_STAFF, ChatFormatting.GOLD, "Monthly (Staff)");
+        } else {
+            src.sendSuccess(() -> Component.literal("Monthly (Staff): not eligible").withStyle(ChatFormatting.RED), false);
+        }
     }
 
     private static void sendOneInfo(CommandSourceStack src, ServerPlayer p, RewardType t, ChatFormatting color, String label) {
@@ -163,7 +169,8 @@ public final class RewardManager {
         UUID id = p.getUUID();
         LAST_NAMES.put(id, safeName(p));
 
-        if ((type == RewardType.MONTHLY_DONATOR || type == RewardType.MONTHLY_GYM) && !isEligibleMonthly(p, type)) {
+        if ((type == RewardType.MONTHLY_DONATOR || type == RewardType.MONTHLY_GYM || type == RewardType.MONTHLY_STAFF)
+                && !isEligibleMonthly(p, type)) {
             p.sendSystemMessage(Component.literal("[Rewards] You are not eligible for this monthly reward.")
                     .withStyle(ChatFormatting.RED));
             return false;
@@ -188,7 +195,7 @@ public final class RewardManager {
                 giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_GOLD));
                 giveOrDrop(p, new ItemStack(ModItems.EVENT_VOUCHER_BLANK));
                 // externe Items
-                giveCrdKeysRaidPass(p, 10); // crdkeys:raid_pass_basic mit uses=10
+                giveCrdKeysRaidPass(p, 10);
                 giveExternal(p, "wanteditems:cobblemon_lucky_box", 5);
                 giveExternal(p, "wanteditems:gold_candy_lucky_box", 5);
                 giveExternal(p, "wanteditems:ancient_poke_ball_lucky_box", 5);
@@ -196,6 +203,10 @@ public final class RewardManager {
             case MONTHLY_GYM:
                 giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_GOLD));
                 giveCrdKeysRaidPass(p, 10);
+                break;
+            case MONTHLY_STAFF:
+                // 1x Gold Coin
+                giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_GOLD));
                 break;
         }
 
@@ -262,10 +273,18 @@ public final class RewardManager {
         saveEligibility();
     }
 
+    /** Setzt NUR das Staff-Flag. */
+    public static void setStaffEligibility(String playerName, boolean staff) {
+        String key = normalizeName(playerName);
+        synchronized (ALLOWED_STAFF) { if (staff) ALLOWED_STAFF.add(key); else ALLOWED_STAFF.remove(key); }
+        saveEligibility();
+    }
+
     private static boolean isEligibleMonthly(ServerPlayer p, RewardType t) {
         String key = normalizeName(p.getGameProfile().getName());
         if (t == RewardType.MONTHLY_DONATOR) return ALLOWED_DONATOR.contains(key);
         if (t == RewardType.MONTHLY_GYM)     return ALLOWED_GYM.contains(key);
+        if (t == RewardType.MONTHLY_STAFF)   return ALLOWED_STAFF.contains(key);
         return true;
     }
 
@@ -286,7 +305,8 @@ public final class RewardManager {
                 return weekMidnight.toInstant();
             }
             case MONTHLY_DONATOR:
-            case MONTHLY_GYM: {
+            case MONTHLY_GYM:
+            case MONTHLY_STAFF: {
                 ZonedDateTime firstOfMonth = zdt.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                 if (zdt.isBefore(firstOfMonth)) firstOfMonth = firstOfMonth.minusMonths(1);
                 return firstOfMonth.toInstant();
@@ -311,7 +331,8 @@ public final class RewardManager {
                 return next.toInstant();
             }
             case MONTHLY_DONATOR:
-            case MONTHLY_GYM: {
+            case MONTHLY_GYM:
+            case MONTHLY_STAFF: {
                 ZonedDateTime next = zdt.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                 if (!next.isAfter(zdt)) next = next.plusMonths(1);
                 return next.toInstant();
@@ -342,7 +363,9 @@ public final class RewardManager {
         if (t == RewardType.DAILY) return "Daily";
         if (t == RewardType.WEEKLY) return "Weekly";
         if (t == RewardType.MONTHLY_DONATOR) return "Monthly (Donator)";
-        return "Monthly (Gym)";
+        if (t == RewardType.MONTHLY_GYM)     return "Monthly (Gym)";
+        if (t == RewardType.MONTHLY_STAFF)   return "Monthly (Staff)";
+        return t.name();
     }
 
     private static String safeName(ServerPlayer p) {
@@ -399,6 +422,7 @@ public final class RewardManager {
     private static void loadEligibility() {
         ALLOWED_DONATOR.clear();
         ALLOWED_GYM.clear();
+        ALLOWED_STAFF.clear();
         Path p = eligibilityFile();
         if (!Files.exists(p)) { saveEligibility(); return; }
         try (var r = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
@@ -412,6 +436,10 @@ public final class RewardManager {
                 String k = normalizeName(n);
                 if (!k.isEmpty()) ALLOWED_GYM.add(k);
             }
+            for (String n : props.getProperty("staff", "").split(",")) {
+                String k = normalizeName(n);
+                if (!k.isEmpty()) ALLOWED_STAFF.add(k);
+            }
         } catch (IOException e) {
             EvolutionBoost.LOGGER.warn("[rewards] failed to load eligibility: {}", e.getMessage());
         }
@@ -423,9 +451,10 @@ public final class RewardManager {
             Properties props = new Properties();
             props.setProperty("donator", String.join(",", ALLOWED_DONATOR));
             props.setProperty("gym", String.join(",", ALLOWED_GYM));
+            props.setProperty("staff", String.join(",", ALLOWED_STAFF));
             try (var w = Files.newBufferedWriter(eligibilityFile(), StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                props.store(w, "Rewards eligibility (names, case-insensitive)  |  Syntax:  donator=name1,name2   gym=nameA,nameB");
+                props.store(w, "Rewards eligibility (names, case-insensitive)  |  Syntax:  donator=name1,name2   gym=nameA,nameB   staff=nameX,nameY");
             }
         } catch (IOException e) {
             EvolutionBoost.LOGGER.warn("[rewards] failed to save eligibility: {}", e.getMessage());
@@ -437,12 +466,11 @@ public final class RewardManager {
     private static void migrateLegacyStateIfNeeded() {
         Path legacy = stateFileLegacyConfig();
         Path world  = stateFileWorld();
-        if (Files.exists(world)) return;           // Weltdatei existiert schon → nichts tun
-        if (!Files.exists(legacy)) return;         // keine Legacy-Datei → nichts tun
+        if (Files.exists(world)) return;
+        if (!Files.exists(legacy)) return;
 
         try {
             List<String> lines = Files.readAllLines(legacy, StandardCharsets.UTF_8);
-            // Semikolon-Format → temporär in STATE laden
             for (String line : lines) {
                 String[] parts = line.split(";");
                 if (parts.length < 1) continue;
@@ -456,7 +484,6 @@ public final class RewardManager {
                 STATE.put(id, st);
                 LAST_NAMES.putIfAbsent(id, "-");
             }
-            // direkt in neues JSON schreiben
             saveState();
             EvolutionBoost.LOGGER.info("[rewards] Migrated legacy rewards_state.json from /config to <world>/evolutionboost/.");
         } catch (IOException e) {
@@ -483,6 +510,7 @@ public final class RewardManager {
                     st.weekly         = parseInstant(pe.last.get("WEEKLY"));
                     st.monthlyDonator = parseInstant(pe.last.get("MONTHLY_DONATOR"));
                     st.monthlyGym     = parseInstant(pe.last.get("MONTHLY_GYM"));
+                    st.monthlyStaff   = parseInstant(pe.last.get("MONTHLY_STAFF"));
                 }
                 if (pe.claims != null) {
                     for (RewardData.Claim c : pe.claims) {
@@ -521,6 +549,7 @@ public final class RewardManager {
                 if (st.weekly         != null) pe.last.put("WEEKLY",           st.weekly.toString());
                 if (st.monthlyDonator != null) pe.last.put("MONTHLY_DONATOR",  st.monthlyDonator.toString());
                 if (st.monthlyGym     != null) pe.last.put("MONTHLY_GYM",      st.monthlyGym.toString());
+                if (st.monthlyStaff   != null) pe.last.put("MONTHLY_STAFF",    st.monthlyStaff.toString());
 
                 if (!st.history.isEmpty()) {
                     pe.claims = new ArrayList<>(st.history.size());
@@ -547,13 +576,15 @@ public final class RewardManager {
         catch (Exception ex) { return null; }
     }
 
-    // Liste der Rollen im Chat ausgeben: /rewards list <donator|gym>
+    // Liste der Rollen im Chat ausgeben: /rewards list <donator|gym|staff>
     public static void sendRoleList(CommandSourceStack src, String roleKey) {
         final Set<String> names;
         if ("donator".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_DONATOR;
         } else if ("gym".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_GYM;
+        } else if ("staff".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_STAFF;
         } else {
             src.sendSuccess(() -> Component.literal("[Rewards] Unknown role: " + roleKey)
                     .withStyle(ChatFormatting.RED), false);
@@ -578,6 +609,7 @@ public final class RewardManager {
         Instant weekly;
         Instant monthlyDonator;
         Instant monthlyGym;
+        Instant monthlyStaff;
 
         final List<HistoryEntry> history = new ArrayList<>();
 
@@ -587,6 +619,7 @@ public final class RewardManager {
                 case WEEKLY: return weekly;
                 case MONTHLY_DONATOR: return monthlyDonator;
                 case MONTHLY_GYM: return monthlyGym;
+                case MONTHLY_STAFF: return monthlyStaff;
                 default: return null;
             }
         }
@@ -596,6 +629,7 @@ public final class RewardManager {
                 case WEEKLY: weekly = when; break;
                 case MONTHLY_DONATOR: monthlyDonator = when; break;
                 case MONTHLY_GYM: monthlyGym = when; break;
+                case MONTHLY_STAFF: monthlyStaff = when; break;
             }
         }
         void clear(RewardType t) {
@@ -604,6 +638,7 @@ public final class RewardManager {
                 case WEEKLY: weekly = null; break;
                 case MONTHLY_DONATOR: monthlyDonator = null; break;
                 case MONTHLY_GYM: monthlyGym = null; break;
+                case MONTHLY_STAFF: monthlyStaff = null; break;
             }
         }
         void addHistory(RewardType t, Instant at) {

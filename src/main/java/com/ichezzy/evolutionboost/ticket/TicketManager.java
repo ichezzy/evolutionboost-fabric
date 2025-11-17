@@ -1,10 +1,13 @@
 package com.ichezzy.evolutionboost.ticket;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -12,18 +15,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
-import net.minecraft.network.chat.Component;
-import net.minecraft.ChatFormatting;
 
 import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Verwalten aktiver Teleport-Sessions (Ticket-basiert ODER manuell via /eventtp). */
+/** Verwalten aktiver Teleport-Sessions (Ticket-basiert ODER manuell via /eventtp).
+ *  Spawns werden in EvolutionBoostConfig (/config/evolutionboost/main.json) unter eventSpawns gespeichert. */
 public final class TicketManager {
     private TicketManager() {}
 
@@ -74,30 +74,113 @@ public final class TicketManager {
 
     private static final Map<UUID, Session> ACTIVE = new ConcurrentHashMap<>();
 
-    /* ================= Persistente Spawns ================= */
+    /* ================= Spawns aus EvolutionBoostConfig ================= */
 
     private static final Map<Target, BlockPos> SPAWNS = new ConcurrentHashMap<>();
-    private static Path configDir() { return FabricLoader.getInstance().getConfigDir().resolve(EvolutionBoost.MOD_ID); }
-    private static Path spawnsFile() { return configDir().resolve("event_spawns.json"); }
 
-    /** Defaults, falls keine Datei existiert. */
+    /** Standard-Spawn, falls nichts konfiguriert ist. */
     private static BlockPos defaultSpawn(Target t) {
         // Beide standardmäßig auf (0,23,0)
         return new BlockPos(0, 23, 0);
     }
 
-    public static BlockPos getSpawn(Target t) {
-        return SPAWNS.getOrDefault(t, defaultSpawn(t));
+    /** Convenience: aktuelle Config-Instanz. */
+    private static EvolutionBoostConfig cfg() {
+        return EvolutionBoostConfig.get();
     }
 
-    public static void setSpawn(Target t, BlockPos pos) {
-        SPAWNS.put(t, pos.immutable());
-        saveSpawns();
+    /**
+     * Spawns aus EvolutionBoostConfig in den RAM-Cache laden.
+     * Keys: "halloween", "safari". Fällt auf Defaults zurück.
+     */
+    private static void loadSpawnsFromConfig() {
+        SPAWNS.clear();
+        for (Target t : Target.values()) {
+            EvolutionBoostConfig.Spawn s = cfg().getSpawn(t.key());
+            if (s != null) {
+                SPAWNS.put(t, s.toBlockPos());
+            } else {
+                SPAWNS.put(t, defaultSpawn(t));
+            }
+        }
     }
+
+    /**
+     * Einen Spawn in die Config schreiben (inkl. Dimension zum Ziel) und speichern.
+     */
+    private static void saveSpawnToConfig(Target t, BlockPos pos) {
+        String dimStr = t.dim.location().toString(); // "event:halloween" bzw. "event:safari_zone"
+        cfg().putSpawn(t.key(), new EvolutionBoostConfig.Spawn(dimStr, pos.getX(), pos.getY(), pos.getZ()));
+        EvolutionBoostConfig.save();
+    }
+
+    /**
+     * Migration: alte /config/evolutionboost/event_spawns.json (falls vorhanden)
+     * nach main.json übernehmen und Legacy-Datei löschen.
+     */
+    private static void migrateLegacyEventSpawnsIfPresent() {
+        Path legacyFile = FabricLoader.getInstance()
+                .getConfigDir().resolve(EvolutionBoost.MOD_ID).resolve("event_spawns.json");
+        if (!Files.exists(legacyFile)) return;
+
+        try {
+            String text = Files.readString(legacyFile);
+
+            // sehr einfache Extraktion (wie vormals): {"halloween":{"x":..,"y":..,"z":..}, "safari":{...}}
+            BlockPos h = extractPos(text, "\"halloween\"");
+            BlockPos s = extractPos(text, "\"safari\"");
+
+            if (h != null) {
+                cfg().putSpawn(Target.HALLOWEEN.key(),
+                        new EvolutionBoostConfig.Spawn(Target.HALLOWEEN.dim.location().toString(), h.getX(), h.getY(), h.getZ()));
+            }
+            if (s != null) {
+                cfg().putSpawn(Target.SAFARI.key(),
+                        new EvolutionBoostConfig.Spawn(Target.SAFARI.dim.location().toString(), s.getX(), s.getY(), s.getZ()));
+            }
+            EvolutionBoostConfig.save();
+
+            try { Files.deleteIfExists(legacyFile); } catch (IOException ignored) {}
+            EvolutionBoost.LOGGER.info("[eventtp] Migrated legacy event_spawns.json -> main.json and removed legacy file.");
+        } catch (Exception e) {
+            EvolutionBoost.LOGGER.warn("[eventtp] failed to migrate legacy event_spawns.json: {}", e.getMessage());
+        }
+    }
+
+    private static BlockPos extractPos(String json, String key) {
+        int i = json.indexOf(key);
+        if (i < 0) return null;
+        int b = json.indexOf('{', i);
+        int e = json.indexOf('}', b);
+        if (b < 0 || e < 0) return null;
+        String obj = json.substring(b + 1, e);
+        int x = intField(obj, "\"x\"");
+        int y = intField(obj, "\"y\"");
+        int z = intField(obj, "\"z\"");
+        if (x == Integer.MIN_VALUE || z == Integer.MIN_VALUE) return null;
+        if (y == Integer.MIN_VALUE) y = 23;
+        return new BlockPos(x, y, z);
+    }
+
+    private static int intField(String obj, String name) {
+        int i = obj.indexOf(name);
+        if (i < 0) return Integer.MIN_VALUE;
+        int c = obj.indexOf(':', i);
+        if (c < 0) return Integer.MIN_VALUE;
+        int comma = obj.indexOf(',', c + 1);
+        String raw = (comma < 0 ? obj.substring(c + 1) : obj.substring(c + 1, comma)).trim();
+        try { return Integer.parseInt(raw); } catch (Exception e) { return Integer.MIN_VALUE; }
+    }
+
+    /* ================= Public API ================= */
 
     public static void init(MinecraftServer server) {
-        loadSpawns();
+        // 1) Legacy-Migration (falls alte Datei vorhanden)
+        migrateLegacyEventSpawnsIfPresent();
+        // 2) Spawns aus Haupt-Config laden
+        loadSpawnsFromConfig();
 
+        // Tick-Loop für Sessions
         ServerTickEvents.END_SERVER_TICK.register(s -> {
             Iterator<Session> it = ACTIVE.values().iterator();
             while (it.hasNext()) {
@@ -136,83 +219,17 @@ public final class TicketManager {
         });
     }
 
-    private static void loadSpawns() {
-        SPAWNS.clear();
-        try {
-            Files.createDirectories(configDir());
-            Path f = spawnsFile();
-            if (!Files.exists(f)) {
-                // Defaults speichern
-                SPAWNS.put(Target.HALLOWEEN, defaultSpawn(Target.HALLOWEEN));
-                SPAWNS.put(Target.SAFARI, defaultSpawn(Target.SAFARI));
-                saveSpawns();
-                return;
-            }
-
-            // *** FIX: kompletten Dateiinhalt lesen (Reader#transferTo braucht Writer, daher Files.readString) ***
-            String text = Files.readString(f);
-
-            parseOne(Target.HALLOWEEN, text, "\"halloween\"");
-            parseOne(Target.SAFARI, text, "\"safari\"");
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.warn("[eventtp] failed to load spawns: {}", e.getMessage());
-            // Fallbacks
-            SPAWNS.put(Target.HALLOWEEN, defaultSpawn(Target.HALLOWEEN));
-            SPAWNS.put(Target.SAFARI, defaultSpawn(Target.SAFARI));
-        }
-    }
-
-    private static void parseOne(Target t, String json, String key) {
-        int i = json.indexOf(key);
-        if (i < 0) { SPAWNS.put(t, defaultSpawn(t)); return; }
-        int b = json.indexOf('{', i);
-        int e = json.indexOf('}', b);
-        if (b < 0 || e < 0) { SPAWNS.put(t, defaultSpawn(t)); return; }
-        String obj = json.substring(b + 1, e);
-        int x = intField(obj, "\"x\"");
-        int y = intField(obj, "\"y\"");
-        int z = intField(obj, "\"z\"");
-        if (x == Integer.MIN_VALUE || z == Integer.MIN_VALUE) {
-            SPAWNS.put(t, defaultSpawn(t));
-            return;
-        }
-        if (y == Integer.MIN_VALUE) y = 23; // Safety
-        SPAWNS.put(t, new BlockPos(x, y, z));
-    }
-
-    private static int intField(String obj, String name) {
-        int i = obj.indexOf(name);
-        if (i < 0) return Integer.MIN_VALUE;
-        int c = obj.indexOf(':', i);
-        if (c < 0) return Integer.MIN_VALUE;
-        int comma = obj.indexOf(',', c + 1);
-        String raw = (comma < 0 ? obj.substring(c + 1) : obj.substring(c + 1, comma)).trim();
-        try { return Integer.parseInt(raw); } catch (Exception e) { return Integer.MIN_VALUE; }
-    }
-
-    private static void saveSpawns() {
-        try {
-            Files.createDirectories(configDir());
-            Path f = spawnsFile();
-            BlockPos h = SPAWNS.getOrDefault(Target.HALLOWEEN, defaultSpawn(Target.HALLOWEEN));
-            BlockPos s = SPAWNS.getOrDefault(Target.SAFARI, defaultSpawn(Target.SAFARI));
-            String json = """
-                    {
-                      "halloween": { "x": %d, "y": %d, "z": %d },
-                      "safari":    { "x": %d, "y": %d, "z": %d }
-                    }
-                    """.formatted(h.getX(), h.getY(), h.getZ(), s.getX(), s.getY(), s.getZ());
-            try (Writer w = Files.newBufferedWriter(f)) {
-                w.write(json);
-            }
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.warn("[eventtp] failed to save spawns: {}", e.getMessage());
-        }
-    }
-
-    /* ================= Public API ================= */
-
     public static boolean hasSession(UUID id) { return ACTIVE.containsKey(id); }
+
+    public static BlockPos getSpawn(Target t) {
+        return SPAWNS.getOrDefault(t, defaultSpawn(t));
+    }
+
+    /** Persistiert jetzt in /config/evolutionboost/main.json -> eventSpawns. */
+    public static void setSpawn(Target t, BlockPos pos) {
+        SPAWNS.put(t, pos.immutable());
+        saveSpawnToConfig(t, pos.immutable());
+    }
 
     /** Ticket: Countdown + Adventure + Auto-Return. */
     public static boolean startTicket(ServerPlayer p, Target target, long ticks) {

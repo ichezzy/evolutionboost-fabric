@@ -4,7 +4,8 @@ public enum RewardType {
     DAILY("daily", Kind.DAILY),
     WEEKLY("weekly", Kind.WEEKLY),
     MONTHLY_DONATOR("monthly_donator", Kind.MONTHLY),
-    MONTHLY_GYM("monthly_gym", Kind.MONTHLY);
+    MONTHLY_GYM("monthly_gym", Kind.MONTHLY),
+    MONTHLY_STAFF("monthly_staff", Kind.MONTHLY);
 
     public enum Kind { DAILY, WEEKLY, MONTHLY }
 
