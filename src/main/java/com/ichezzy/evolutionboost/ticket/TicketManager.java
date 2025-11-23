@@ -29,20 +29,27 @@ public final class TicketManager {
 
     public enum Target {
         HALLOWEEN(ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("event:halloween"))),
-        SAFARI(ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("event:safari_zone")));
+        SAFARI   (ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("event:safari_zone"))),
+        CHRISTMAS(ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("event:christmas")));
 
         public final ResourceKey<Level> dim;
         Target(ResourceKey<Level> d) { this.dim = d; }
 
         public String key() {
-            return this == HALLOWEEN ? "halloween" : "safari";
+            switch (this) {
+                case HALLOWEEN: return "halloween";
+                case SAFARI:    return "safari";
+                case CHRISTMAS: return "christmas";
+                default:        return name().toLowerCase(Locale.ROOT);
+            }
         }
 
         public static Target from(String s) {
             if (s == null) return null;
             String k = s.trim().toLowerCase(Locale.ROOT);
-            if (k.equals("halloween")) return HALLOWEEN;
+            if (k.equals("halloween"))    return HALLOWEEN;
             if (k.equals("safari") || k.equals("safari_zone")) return SAFARI;
+            if (k.equals("christmas"))    return CHRISTMAS;
             return null;
         }
     }
@@ -80,7 +87,7 @@ public final class TicketManager {
 
     /** Standard-Spawn, falls nichts konfiguriert ist. */
     private static BlockPos defaultSpawn(Target t) {
-        // Beide standardmäßig auf (0,23,0)
+        // Standard: (0,23,0) für alle
         return new BlockPos(0, 23, 0);
     }
 
@@ -91,7 +98,7 @@ public final class TicketManager {
 
     /**
      * Spawns aus EvolutionBoostConfig in den RAM-Cache laden.
-     * Keys: "halloween", "safari". Fällt auf Defaults zurück.
+     * Keys: "halloween", "safari", "christmas". Fällt auf Defaults zurück.
      */
     private static void loadSpawnsFromConfig() {
         SPAWNS.clear();
@@ -109,7 +116,7 @@ public final class TicketManager {
      * Einen Spawn in die Config schreiben (inkl. Dimension zum Ziel) und speichern.
      */
     private static void saveSpawnToConfig(Target t, BlockPos pos) {
-        String dimStr = t.dim.location().toString(); // "event:halloween" bzw. "event:safari_zone"
+        String dimStr = t.dim.location().toString(); // z.B. "event:halloween"
         cfg().putSpawn(t.key(), new EvolutionBoostConfig.Spawn(dimStr, pos.getX(), pos.getY(), pos.getZ()));
         EvolutionBoostConfig.save();
     }
@@ -117,6 +124,7 @@ public final class TicketManager {
     /**
      * Migration: alte /config/evolutionboost/event_spawns.json (falls vorhanden)
      * nach main.json übernehmen und Legacy-Datei löschen.
+     * (christmas gibt es dort naturgemäß nicht – ist ok)
      */
     private static void migrateLegacyEventSpawnsIfPresent() {
         Path legacyFile = FabricLoader.getInstance()
@@ -126,7 +134,6 @@ public final class TicketManager {
         try {
             String text = Files.readString(legacyFile);
 
-            // sehr einfache Extraktion (wie vormals): {"halloween":{"x":..,"y":..,"z":..}, "safari":{...}}
             BlockPos h = extractPos(text, "\"halloween\"");
             BlockPos s = extractPos(text, "\"safari\"");
 
