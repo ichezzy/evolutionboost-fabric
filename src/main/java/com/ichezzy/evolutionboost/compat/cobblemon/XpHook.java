@@ -15,19 +15,17 @@ import java.util.Objects;
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.*;
 
 /**
- * Dimension-spezifischer XP-Boost (Cobblemon Battle-EXP).
- * - Togglebar via /halloweenxp on|off
- * - Wirkt NUR in dimension "event:halloween", sonst normal.
- * - Nutzt Reflection, damit es auch bei kleineren API-Änderungen robust bleibt.
+ * XP-Boost (Cobblemon Battle-EXP) – kombiniert GLOBAL × DIMENSION × (optional PLAYER).
+ * Alte Halloween-Toggle bleibt kompatibel, dimensionale Faktoren kommen aus BoostManager.
  */
 @SuppressWarnings({"rawtypes","unchecked"})
 public final class XpHook {
     private XpHook() {}
 
-    /** Toggle vom Command. */
+    /** Legacy-Toggle für Halloween (kann bleiben, wirkt zusätzlich zur neuen Dimension-Logik). */
     private static volatile boolean HALLOWEEN_XP_ENABLED = false;
 
-    /** Ziel-Dimension: event:halloween */
+    /** Ziel-Dimensionen (Legacy: Halloween). */
     private static final ResourceKey<net.minecraft.world.level.Level> HALLOWEEN_DIM =
             ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
                     ResourceLocation.fromNamespaceAndPath("event", "halloween"));
@@ -54,7 +52,6 @@ public final class XpHook {
             Object src = getSource.invoke(ev);
             if (src == null) return;
 
-            // BattleExperienceSource check
             try {
                 Class<?> battleSrc = Class.forName("com.cobblemon.mod.common.api.pokemon.experience.BattleExperienceSource");
                 if (!battleSrc.isInstance(src)) return;
@@ -62,43 +59,41 @@ public final class XpHook {
                 if (!src.getClass().getName().toLowerCase().contains("battle")) return;
             }
 
-            // ---- 2) Spieler/Level ermitteln, um Dimension zu prüfen ----
+            // ---- 2) Spieler/Level für Dimension ----
             ServerPlayer player = extractServerPlayer(ev, src);
             ServerLevel level  = (player != null) ? player.serverLevel() : extractServerLevel(ev, src, server);
             if (level == null) return;
 
-            // ---- 3) Wenn Toggle aus -> nichts tun ----
-            if (!HALLOWEEN_XP_ENABLED) return;
-
-            // ---- 4) Nur in event:halloween boosten ----
-            if (!Objects.equals(level.dimension(), HALLOWEEN_DIM)) return;
-
-            // ---- 5) XP lesen, globaler Event-Boost anwenden, zurückschreiben ----
+            // ---- 3) XP lesen / setzen ----
             Method getExp = find(ev.getClass(), "getExperience");
             Method setExp = find(ev.getClass(), "setExperience", int.class);
             if (getExp == null || setExp == null) return;
 
             int exp = ((Number) getExp.invoke(ev)).intValue();
 
-            // Dein bestehendes Boost-System bleibt intakt (global/spielerbezogen);
-            // wir multiplizieren ON TOP nur in dieser Dimension (x2).
-            double mult = BoostManager.get(server).getMultiplierFor(BoostType.XP, null);
-            mult *= 2.0; // dimension-spezifisch x2
+            // ---- 4) Multiplikator: GLOBAL × DIMENSION × PLAYER ----
+            var bm = BoostManager.get(server);
+            double mult = bm.getMultiplierFor(BoostType.XP,
+                    player != null ? player.getUUID() : null,
+                    level.dimension());
+
+            // Legacy: Wenn Halloween-Toggle manuell aktiv UND wir sind in Halloween-Dim, additiv x2 oben drauf
+            if (HALLOWEEN_XP_ENABLED && Objects.equals(level.dimension(), HALLOWEEN_DIM)) {
+                mult *= 2.0;
+            }
 
             int boosted = Math.max(1, (int) Math.round(exp * mult));
             setExp.invoke(ev, boosted);
 
-        } catch (Throwable t) {
-            // bewusst still, damit bei API-Änderungen kein Crash entsteht
+        } catch (Throwable ignored) {
+            // still, um API-Änderungen zu tolerieren
         }
     }
 
     /* -------------------------------- Helpers -------------------------------- */
 
-    /** Versucht, einen ServerPlayer aus dem Event oder der Source zu holen. */
     private static ServerPlayer extractServerPlayer(Object ev, Object src) {
         try {
-            // häufig direkt am Event
             Method m = findAny(ev.getClass(), "getPlayer", "player", "getServerPlayer", "serverPlayer");
             if (m != null) {
                 Object o = m.invoke(ev);
@@ -107,7 +102,6 @@ public final class XpHook {
         } catch (Throwable ignored) {}
 
         try {
-            // manchmal hängt es an der Source
             Method m = findAny(src.getClass(), "getPlayer", "player", "getServerPlayer", "serverPlayer", "getTrainer");
             if (m != null) {
                 Object o = m.invoke(src);
@@ -118,10 +112,8 @@ public final class XpHook {
         return null;
     }
 
-    /** Fallback: Wenn kein Player ermittelbar ist, versuche ein ServerLevel. */
     private static ServerLevel extractServerLevel(Object ev, Object src, MinecraftServer server) {
         try {
-            // direkt am Event
             Method m = findAny(ev.getClass(), "getLevel", "getWorld", "level", "world");
             if (m != null) {
                 Object o = m.invoke(ev);
@@ -130,7 +122,6 @@ public final class XpHook {
         } catch (Throwable ignored) {}
 
         try {
-            // an der Source
             Method m = findAny(src.getClass(), "getLevel", "getWorld", "level", "world");
             if (m != null) {
                 Object o = m.invoke(src);
@@ -138,10 +129,7 @@ public final class XpHook {
             }
         } catch (Throwable ignored) {}
 
-        // absoluter Fallback: nimm Overworld, wenn vorhanden (nur um NPEs zu vermeiden)
-        try {
-            return server.overworld();
-        } catch (Throwable ignored) {}
+        try { return server.overworld(); } catch (Throwable ignored) {}
         return null;
     }
 }

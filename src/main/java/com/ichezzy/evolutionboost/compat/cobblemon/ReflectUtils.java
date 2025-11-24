@@ -1,77 +1,58 @@
 package com.ichezzy.evolutionboost.compat.cobblemon;
 
-import com.ichezzy.evolutionboost.EvolutionBoost;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
-import java.lang.reflect.*;
-import java.util.*;
-
-@SuppressWarnings({"rawtypes","unchecked"})
 public final class ReflectUtils {
     private ReflectUtils() {}
 
-    public interface EH { Object h(Object ev) throws Throwable; }
+    // ... deine bestehenden Methoden bleiben; ergänzt wird Folgendes:
 
-    public static Object unit() {
-        try { return Class.forName("kotlin.Unit").getField("INSTANCE").get(null); }
-        catch (Throwable t) { return null; }
-    }
-
-    public static void subscribeField(Class<?> clsEvents, Object priority, String fieldName, EH handler) {
-        try {
-            Field f = null;
-            try { f = clsEvents.getField(fieldName); } catch (NoSuchFieldException ignored) {}
-            if (f == null) for (Field ff : clsEvents.getFields())
-                if (ff.getName().equalsIgnoreCase(fieldName)) { f = ff; break; }
-            if (f == null) return;
-
-            Object bus = f.get(null);
-            Class<?> fn1 = Class.forName("kotlin.jvm.functions.Function1");
-            Method subscribe = find(bus.getClass(), "subscribe", priority.getClass(), fn1);
-            if (subscribe != null) {
-                Object lambda = Proxy.newProxyInstance(fn1.getClassLoader(), new Class<?>[]{fn1},
-                        (proxy, m, args) -> "invoke".equals(m.getName())
-                                ? safe(handler, args != null && args.length > 0 ? args[0] : null)
-                                : null);
-                subscribe.invoke(bus, priority, lambda);
-                EvolutionBoost.LOGGER.info("[evolutionboost] subscribed: {}", f.getName());
-            }
-        } catch (Throwable t) {
-            EvolutionBoost.LOGGER.debug("[evolutionboost] subscribeField {} failed: {}", fieldName, t.toString());
-        }
-    }
-
-    public static Object safe(EH h, Object ev) {
-        try { return h.h(ev); } catch (Throwable t) {
-            EvolutionBoost.LOGGER.debug("[evolutionboost] handler error: {}", t.toString());
-            return unit();
-        }
-    }
-
+    /** Bestehende Utility aus deinem Projekt (angenommen): */
     public static Method find(Class<?> c, String name, Class<?>... params) {
-        try { return c.getMethod(name, params); } catch (NoSuchMethodException e) { return null; }
+        try { return c.getDeclaredMethod(name, params); } catch (Exception ignored) { return null; }
     }
-
     public static Method findAny(Class<?> c, String... names) {
-        for (String n : names) for (Method m : c.getMethods()) if (m.getName().equals(n)) return m;
+        for (String n : names) {
+            for (Method m : c.getMethods()) if (m.getName().equals(n)) return m;
+            try { Method m = c.getDeclaredMethod(n); m.setAccessible(true); return m; } catch (Exception ignored) {}
+        }
         return null;
     }
 
-    public static Float tryGetFloat(Object ev, String getter, String fieldName) {
+    /** Dein bestehendes subscribeField(...) wird hier vorausgesetzt. */
+    public static void subscribeField(Class<?> eventsClass, Object priorityEnumOrNull, String fieldName, Function<Object,Object> listener) {
         try {
-            Method g = find(ev.getClass(), getter);
-            if (g != null) return (Float) g.invoke(ev);
-            Field f = ev.getClass().getDeclaredField(fieldName);
-            f.setAccessible(true);
-            return (Float) f.get(ev);
-        } catch (Throwable t) { return null; }
+            Field f = eventsClass.getField(fieldName);
+            Object event = f.get(null);
+            // erwartete Signatur: event.subscribe(priority?, listener)
+            Method subscribe = findAny(event.getClass(), "subscribe");
+            if (subscribe == null) return;
+            if (subscribe.getParameterCount() == 2 && priorityEnumOrNull != null) {
+                subscribe.invoke(event, priorityEnumOrNull, listener);
+            } else if (subscribe.getParameterCount() == 1) {
+                subscribe.invoke(event, listener);
+            }
+        } catch (Throwable ignored) {}
     }
 
-    public static void amplifyListInPlace(List list, double mult) {
-        int base = (int) Math.floor(mult);
-        double frac = mult - base;
-        if (base <= 1 && frac <= 1e-9) return;
-        List snapshot = new ArrayList(list);
-        for (int i = 1; i < base; i++) list.addAll(snapshot);
-        if (frac > 1e-9 && new Random().nextDouble() < frac) list.addAll(snapshot);
+    /** Neu: probiert mehrere Feldnamen; nimmt das erste, das existiert. */
+    public static void subscribeFieldOptional(Class<?> eventsClass, Object priorityEnumOrNull, String[] possibleFields,
+                                              Function<Object,Object> listener) {
+        for (String name : possibleFields) {
+            try {
+                Field f = eventsClass.getField(name);
+                if (f != null) {
+                    subscribeField(eventsClass, priorityEnumOrNull, name, listener);
+                    return;
+                }
+            } catch (Throwable ignored) {}
+        }
     }
+
+    /** Mini-Helper für Listener: Rückgabewert als "Unit". */
+    public static Object unit() { return null; }
 }

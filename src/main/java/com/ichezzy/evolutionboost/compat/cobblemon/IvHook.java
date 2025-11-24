@@ -1,84 +1,118 @@
 package com.ichezzy.evolutionboost.compat.cobblemon;
 
-import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.lang.reflect.Method;
-import java.util.*;
 
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.*;
 
+/**
+ * IV-Hook – skaliert z. B. die Anzahl perfekter IV-Rolls oder einen Bonus-Wert.
+ * Nutzt GLOBAL × DIMENSION × (optional PLAYER).
+ */
 @SuppressWarnings({"rawtypes","unchecked"})
 public final class IvHook {
     private IvHook() {}
 
     public static void register(MinecraftServer server, Class<?> clsEvents, Object priority) {
-        subscribeField(clsEvents, priority, "POKEMON_ENTITY_SPAWN", ev -> {
-            tryIvs(server, ev);
+        subscribeField(clsEvents, priority, "IV_ROLL_EVENT_PRE", ev -> {
+            tryAdjust(server, ev);
+            return unit();
+        });
+        // Fallback-Namen
+        subscribeField(clsEvents, priority, "POKEMON_IV_EVENT_PRE", ev -> {
+            tryAdjust(server, ev);
             return unit();
         });
     }
 
-    private static void tryIvs(MinecraftServer server, Object ev) {
+    private static void tryAdjust(MinecraftServer server, Object ev) {
         try {
-            double mult = BoostManager.get(server).getMultiplierFor(BoostType.IV, null);
-            if (mult <= 1.0) return;
+            ServerPlayer player = tryPlayer(ev);
+            ServerLevel  level  = tryLevel(ev, server);
 
-            Method mGetEntity = find(ev.getClass(), "getEntity");
-            if (mGetEntity == null) return;
-            Object entity = mGetEntity.invoke(ev);
-            if (entity == null) return;
+            double mult = BoostManager.get(server)
+                    .getMultiplierFor(BoostType.IV, player != null ? player.getUUID() : null, level != null ? level.dimension() : null);
 
-            Class<?> clsPokemonEntity = Class.forName("com.cobblemon.mod.common.entity.pokemon.PokemonEntity");
-            if (!clsPokemonEntity.isInstance(entity)) return;
+            // Variante A: perfekte IV-Rolls erhöhen
+            Integer perfect = getInt(ev, "getPerfectIvRolls", "getGuaranteedPerfectIVs", "getPerfects");
+            if (perfect != null && mult != 1.0) {
+                int boosted = (int) Math.max(0, Math.round(perfect * mult));
+                callSetter(ev, "setPerfectIvRolls", int.class, boosted);
+                callSetter(ev, "setGuaranteedPerfectIVs", int.class, boosted);
+                callSetter(ev, "setPerfects", int.class, boosted);
+                return;
+            }
 
-            server.execute(() -> {
-                try {
-                    Object pokemon = clsPokemonEntity.getMethod("getPokemon").invoke(entity);
-                    if (pokemon == null) return;
+            // Variante B: generischer Bonuswert
+            Double bonus = getDouble(ev, "getIvBonus", "getBonus");
+            if (bonus != null && mult != 1.0) {
+                double boosted = Math.max(0.0, bonus * mult);
+                callSetter(ev, "setIvBonus", double.class, boosted);
+                callSetter(ev, "setBonus", double.class, boosted);
+            }
+        } catch (Throwable ignored) {}
+    }
 
-                    // Stats refs
-                    Class<?> statsCls = Class.forName("com.cobblemon.mod.common.api.pokemon.stats.Stats");
-                    Object HP  = statsCls.getField("HP").get(null);
-                    Object ATK = statsCls.getField("ATTACK").get(null);
-                    Object DEF = statsCls.getField("DEFENCE").get(null);
-                    Object SPA = statsCls.getField("SPECIAL_ATTACK").get(null);
-                    Object SPD = statsCls.getField("SPECIAL_DEFENCE").get(null);
-                    Object SPE = statsCls.getField("SPEED").get(null);
+    /* helpers */
 
-                    List<Object> stats = new ArrayList<>(Arrays.asList(HP, ATK, DEF, SPA, SPD, SPE));
-                    Collections.shuffle(stats, new Random());
+    private static ServerPlayer tryPlayer(Object ev) {
+        try {
+            Method m = findAny(ev.getClass(), "getPlayer", "player", "getServerPlayer", "serverPlayer", "getTrainer");
+            if (m != null) {
+                Object o = m.invoke(ev);
+                if (o instanceof ServerPlayer sp) return sp;
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
 
-                    // NEU: exakt floor(mult) garantierte 31er
-                    int guaranteed = Math.min(6, (int) Math.floor(mult));
+    private static ServerLevel tryLevel(Object ev, MinecraftServer server) {
+        try {
+            Method m = findAny(ev.getClass(), "getLevel", "getWorld", "level", "world");
+            if (m != null) {
+                Object o = m.invoke(ev);
+                if (o instanceof ServerLevel sl) return sl;
+            }
+        } catch (Throwable ignored) {}
+        try { return server.overworld(); } catch (Throwable ignored) {}
+        return null;
+    }
 
-                    if (guaranteed > 0) {
-                        Method mSetIV = findAny(pokemon.getClass(), "setIV", "setIv", "setIvValue");
-                        if (mSetIV != null) {
-                            for (int i = 0; i < guaranteed; i++) {
-                                try { mSetIV.invoke(pokemon, stats.get(i), 31); }
-                                catch (IllegalArgumentException wrongOrder) { mSetIV.invoke(pokemon, 31, stats.get(i)); }
-                            }
-                        } else {
-                            EvolutionBoost.LOGGER.debug("[evolutionboost] setIV method not found");
-                        }
-                    }
-
-                    // evtl. Recalc (sicher ist sicher)
-                    Method recalc = findAny(pokemon.getClass(), "recalculateStats", "recalculate", "calculateStats", "refreshStats");
-                    if (recalc != null) {
-                        try {
-                            if (recalc.getParameterCount() == 0) recalc.invoke(pokemon);
-                            else if (recalc.getParameterCount() == 1 && recalc.getParameterTypes()[0] == boolean.class)
-                                recalc.invoke(pokemon, Boolean.TRUE);
-                        } catch (Throwable ignored) {}
-                    }
-                } catch (Throwable t) {
-                    EvolutionBoost.LOGGER.debug("[evolutionboost] tryIvs (deferred) failed: {}", t.toString());
+    private static Integer getInt(Object ev, String... names) {
+        for (String n : names) {
+            try {
+                Method m = find(ev.getClass(), n);
+                if (m != null) {
+                    Object v = m.invoke(ev);
+                    if (v instanceof Number num) return num.intValue();
                 }
-            });
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static Double getDouble(Object ev, String... names) {
+        for (String n : names) {
+            try {
+                Method m = find(ev.getClass(), n);
+                if (m != null) {
+                    Object v = m.invoke(ev);
+                    if (v instanceof Number num) return num.doubleValue();
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static void callSetter(Object ev, String name, Class<?> argType, Object value) {
+        try {
+            Method m = find(ev.getClass(), name, argType);
+            if (m != null) m.invoke(ev, value);
         } catch (Throwable ignored) {}
     }
 }

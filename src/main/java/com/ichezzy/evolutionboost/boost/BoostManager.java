@@ -7,37 +7,48 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/** Holds active boosts (global + per-player) and persists them. */
+/** Hält aktive Boosts (GLOBAL + PLAYER) und persistiert sie.
+ *  PLUS: nicht-persistente Dimension-Multiplikatoren (zur Laufzeit per Commands/Events). */
 public class BoostManager extends SavedData {
     private static final String SAVE_KEY = EvolutionBoost.MOD_ID + "_boosts";
 
     private final Map<String, ActiveBoost> active = new ConcurrentHashMap<>();
     private final Map<String, ServerBossEvent> bossbars = new HashMap<>();
 
-    /** 1.21.1 way: use a Factory + computeIfAbsent(factory, key). */
+    /** Dimensionale Multiplikatoren pro BoostType (nicht persistent). */
+    private final EnumMap<BoostType, Map<ResourceKey<Level>, Double>> dimensionMults =
+            new EnumMap<>(BoostType.class);
+
+    /** 1.21.1-Weg: Factory + computeIfAbsent(factory, key). */
     public static BoostManager get(MinecraftServer server) {
         var level = server.overworld();
         if (level == null) throw new IllegalStateException("[evolutionboost] Overworld not ready yet");
         var storage = level.getDataStorage();
         var factory = new SavedData.Factory<>(
-                BoostManager::new,                 // constructor for new
-                BoostManager::load,                // reader from NBT
-                null                               // DataFixTypes (none)
+                BoostManager::new,
+                BoostManager::load,
+                null
         );
         return storage.computeIfAbsent(factory, SAVE_KEY);
     }
 
-    public BoostManager() {}
+    public BoostManager() {
+        for (BoostType t : BoostType.values()) {
+            dimensionMults.put(t, new ConcurrentHashMap<>());
+        }
+    }
 
     // ---------- Persistence ----------
     public static BoostManager load(CompoundTag tag, HolderLookup.Provider lookup) {
@@ -80,7 +91,7 @@ public class BoostManager extends SavedData {
         return tag;
     }
 
-    // ---------- API ----------
+    // ---------- API: hinzufügen/entfernen ----------
     public String addBoost(MinecraftServer server, ActiveBoost ab) {
         String key = makeKey(ab);
         ab.bossBarId = key;
@@ -121,18 +132,53 @@ public class BoostManager extends SavedData {
         setDirty();
     }
 
+    // ---------- Dimension-API ----------
+    public void setDimensionMultiplier(BoostType type, ResourceKey<Level> dim, double multiplier) {
+        if (dim == null) return;
+        dimensionMults.get(type).put(dim, Math.max(0.0, multiplier));
+    }
+
+    public void clearDimensionMultiplier(BoostType type, ResourceKey<Level> dim) {
+        if (dim == null) return;
+        dimensionMults.get(type).remove(dim);
+    }
+
+    public void clearAllDimensionMultipliers(ResourceKey<Level> dim) {
+        if (dim == null) return;
+        for (BoostType t : BoostType.values()) dimensionMults.get(t).remove(dim);
+    }
+
+    public double getDimensionMultiplier(BoostType type, ResourceKey<Level> dim) {
+        if (dim == null) return 1.0;
+        return dimensionMults.get(type).getOrDefault(dim, 1.0);
+    }
+
+    // ---------- Abfrage ----------
+    /** Kompat: nur Global + Player. */
     public double getMultiplierFor(BoostType type, UUID playerOrNull) {
+        return getMultiplierFor(type, playerOrNull, null);
+    }
+
+    /** Kombiniert Global × Dimension × (optional Player). */
+    public double getMultiplierFor(BoostType type, UUID playerOrNull, ResourceKey<Level> dimOrNull) {
         long now = System.currentTimeMillis();
         double mult = 1.0;
+
         for (ActiveBoost ab : active.values()) {
             if (ab.type != type) continue;
             if (ab.endTimeMs < now) continue;
-            if (ab.scope == BoostScope.GLOBAL) mult *= ab.multiplier;
-            else if (playerOrNull != null && playerOrNull.equals(ab.player)) mult *= ab.multiplier;
+            if (ab.scope == BoostScope.GLOBAL) {
+                mult *= ab.multiplier;
+            } else if (playerOrNull != null && playerOrNull.equals(ab.player)) {
+                mult *= ab.multiplier;
+            }
         }
+
+        mult *= getDimensionMultiplier(type, dimOrNull);
         return mult;
     }
 
+    // ---------- Tick / Bossbars ----------
     public void tick(MinecraftServer server) {
         long now = System.currentTimeMillis();
         List<String> toRemove = new ArrayList<>();
@@ -148,7 +194,7 @@ public class BoostManager extends SavedData {
 
     private static String makeKey(ActiveBoost ab) {
         if (ab.scope == BoostScope.GLOBAL) return ab.type.name() + "@GLOBAL";
-        return ab.type.name() + "@" + ab.player;
+        return ab.type.name() + "@" + ab.player; // <-- Instanzfeld, kein statischer Zugriff
     }
 
     private void createOrUpdateBossbar(MinecraftServer server, ActiveBoost ab) {
@@ -174,7 +220,6 @@ public class BoostManager extends SavedData {
         float progress = Math.max(0f, Math.min(1f, (float) leftMs / (float) ab.durationMs));
         bar.setProgress(progress);
         bar.setName(titleFor(ab, leftMs));
-        // keep viewers in sync
         if (ab.scope == BoostScope.GLOBAL) {
             for (ServerPlayer sp : server.getPlayerList().getPlayers())
                 if (!bar.getPlayers().contains(sp)) bar.addPlayer(sp);
@@ -201,7 +246,6 @@ public class BoostManager extends SavedData {
         String timer = formatDuration(leftMs);
         String txt = scope + " " + ab.type + " BOOST x" + ab.multiplier + " " + timer + who;
 
-        // farbe + fett nach Typ
         var color = switch (ab.type) {
             case SHINY -> ChatFormatting.GOLD;
             case XP    -> ChatFormatting.GREEN;

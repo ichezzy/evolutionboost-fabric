@@ -1,151 +1,119 @@
 package com.ichezzy.evolutionboost.compat.cobblemon;
 
+import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.*;
 
-@SuppressWarnings({"unchecked"})
+/**
+ * Shiny-Chance-Hook (Reflection, robust gegen kleinere API-Änderungen).
+ * Rechnet: FINAL = BASE × GLOBAL × DIMENSION × (optional PLAYER)
+ */
+@SuppressWarnings({"rawtypes","unchecked"})
 public final class ShinyHook {
     private ShinyHook() {}
 
-    /** TEST: Fürs Debuggen hart x100 – danach bitte wieder auf false setzen. */
-    private static final boolean TEST_FORCE_MULT = false;
-    private static final double  TEST_MULT_VALUE = 100.0;
-
-    // Ziel-Dimension für x2-Boost (statt HalloweenWeatherHook)
-    private static final ResourceKey<net.minecraft.world.level.Level> HALLOWEEN_DIM =
-            ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("event", "halloween"));
-
-    /** true, wenn Spieler in event:halloween steht. */
-    private static boolean shinyBoostActiveFor(ServerPlayer player) {
-        return player != null && player.serverLevel() != null && player.serverLevel().dimension().equals(HALLOWEEN_DIM);
-    }
-
-    /** true, wenn die Welt event:halloween ist. */
-    private static boolean shinyBoostActiveIn(ServerLevel level) {
-        return level != null && level.dimension().equals(HALLOWEEN_DIM);
-    }
-
     public static void register(MinecraftServer server, Class<?> clsEvents, Object priority) {
-        // Event: SHINY_CHANCE_CALCULATION
-        subscribeField(clsEvents, priority, "SHINY_CHANCE_CALCULATION", ev -> {
-            tryShinyEvent(server, ev);
+        // Kandidaten: SPAWN_SHINY_ROLL_EVENT_PRE o.ä. – wir gehen über Reflection.
+        subscribeField(clsEvents, priority, "SHINY_ROLL_EVENT_PRE", ev -> {
+            tryAdjustShiny(server, ev);
             return unit();
         });
-
-        // Fallback: POKEMON_ENTITY_SPAWN
-        subscribeField(clsEvents, priority, "POKEMON_ENTITY_SPAWN", ev -> {
-            tryShinySpawnFallback(server, ev);
+        // Fallback-Namen, falls oben nicht existiert:
+        subscribeField(clsEvents, priority, "POKEMON_SHINY_ROLL_EVENT_PRE", ev -> {
+            tryAdjustShiny(server, ev);
             return unit();
         });
     }
 
-    /** SHINY_CHANCE_CALCULATION: Chance = current * multiplier. */
-    private static void tryShinyEvent(MinecraftServer server, Object ev) {
+    private static void tryAdjustShiny(MinecraftServer server, Object ev) {
         try {
-            double baseMult = TEST_FORCE_MULT ? TEST_MULT_VALUE
-                    : BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null);
+            // Versuche Spieler & Welt zu ermitteln
+            ServerPlayer player = tryPlayer(ev);
+            ServerLevel  level  = tryLevel(ev, server);
 
-            // addModificationFunction(Function3<Float, ServerPlayer?, Pokemon, Float>)
-            Class<?> fn3 = Class.forName("kotlin.jvm.functions.Function3");
-            Method addFn = find(ev.getClass(), "addModificationFunction", fn3);
-            if (addFn != null) {
-                final double capturedBase = baseMult; // effectively final
-                Object lambda = Proxy.newProxyInstance(fn3.getClassLoader(), new Class<?>[]{ fn3 },
-                        (proxy, m, args) -> {
-                            String name = m.getName();
-                            if ("invoke".equals(name)) {
-                                float current = ((Number) args[0]).floatValue();
-                                ServerPlayer player = null;
-                                try { player = (ServerPlayer) args[1]; } catch (Throwable ignored) {}
+            // Basischance holen
+            Double baseChance = getDouble(ev, "getChance", "chance", "getShinyChance", "getBaseChance");
+            Integer baseRolls = getInt(ev, "getRolls", "getShinyRolls");
 
-                                double effective = capturedBase;
-                                // x2 nur, wenn Spieler in event:halloween
-                                try {
-                                    if (player != null && shinyBoostActiveFor(player)) {
-                                        effective *= 2.0;
-                                    }
-                                } catch (Throwable ignored) { /* optional */ }
+            double mult = BoostManager.get(server)
+                    .getMultiplierFor(BoostType.SHINY, player != null ? player.getUUID() : null, level != null ? level.dimension() : null);
 
-                                float out = (float) Math.max(0.0, current * (float) effective);
-                                return out; // autobox to Float
-                            }
-                            if ("equals".equals(name)) return proxy == args[0];
-                            if ("hashCode".equals(name)) return System.identityHashCode(proxy);
-                            if ("toString".equals(name)) return "Function3Proxy(ShinyChance)";
-                            return null;
-                        });
-                addFn.invoke(ev, lambda);
-                return;
+            if (baseChance != null) {
+                double newChance = Math.max(0.0, baseChance * mult);
+                callSetter(ev, "setChance", double.class, newChance);
+                callSetter(ev, "setShinyChance", double.class, newChance);
             }
-
-            // Fallback: addModifier(delta)
-            Method addMod = find(ev.getClass(), "addModifier", float.class);
-            Float baseChance = tryGetFloat(ev, "getBaseChance", "baseChance");
-            if (addMod != null && baseChance != null) {
-                float target = (float) Math.max(0.0, baseChance * (float) baseMult);
-                float delta  = target - baseChance;
-                addMod.invoke(ev, delta);
+            if (baseRolls != null) {
+                int newRolls = (int) Math.max(1, Math.round(baseRolls * mult));
+                callSetter(ev, "setRolls", int.class, newRolls);
+                callSetter(ev, "setShinyRolls", int.class, newRolls);
             }
         } catch (Throwable ignored) {}
     }
 
-    /** Spawn-Fallback: zusätzliche unabhängige Rolls, nur wenn noch nicht shiny. */
-    private static void tryShinySpawnFallback(MinecraftServer server, Object ev) {
+    /* --------------- helpers --------------- */
+
+    private static ServerPlayer tryPlayer(Object ev) {
         try {
-            double baseMult = TEST_FORCE_MULT ? TEST_MULT_VALUE
-                    : BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null);
+            Method m = findAny(ev.getClass(), "getPlayer", "player", "getServerPlayer", "serverPlayer", "getTrainer");
+            if (m != null) {
+                Object o = m.invoke(ev);
+                if (o instanceof ServerPlayer sp) return sp;
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
 
-            Method mGetEntity = find(ev.getClass(), "getEntity");
-            if (mGetEntity == null) return;
-            Object entity = mGetEntity.invoke(ev);
-            if (entity == null) return;
+    private static ServerLevel tryLevel(Object ev, MinecraftServer server) {
+        try {
+            Method m = findAny(ev.getClass(), "getLevel", "getWorld", "level", "world");
+            if (m != null) {
+                Object o = m.invoke(ev);
+                if (o instanceof ServerLevel sl) return sl;
+            }
+        } catch (Throwable ignored) {}
+        try { return server.overworld(); } catch (Throwable ignored) {}
+        return null;
+    }
 
-            Class<?> clsPokemonEntity = Class.forName("com.cobblemon.mod.common.entity.pokemon.PokemonEntity");
-            if (!clsPokemonEntity.isInstance(entity)) return;
+    private static Double getDouble(Object ev, String... names) {
+        for (String n : names) {
+            try {
+                Method m = find(ev.getClass(), n);
+                if (m != null) {
+                    Object v = m.invoke(ev);
+                    if (v instanceof Number num) return num.doubleValue();
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
 
-            final double capturedBase = baseMult; // effectively final
-            server.execute(() -> {
-                try {
-                    Object pokemon = clsPokemonEntity.getMethod("getPokemon").invoke(entity);
-                    if (pokemon == null) return;
+    private static Integer getInt(Object ev, String... names) {
+        for (String n : names) {
+            try {
+                Method m = find(ev.getClass(), n);
+                if (m != null) {
+                    Object v = m.invoke(ev);
+                    if (v instanceof Number num) return num.intValue();
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
 
-                    Method getIsShiny = findAny(pokemon.getClass(), "isShiny", "getShiny");
-                    boolean already = getIsShiny != null && Boolean.TRUE.equals(getIsShiny.invoke(pokemon));
-                    if (already) return;
-
-                    // prüfe Dimension auf x2
-                    double effective = capturedBase;
-                    try {
-                        Object levelObj = clsPokemonEntity.getMethod("level").invoke(entity);
-                        if (levelObj instanceof ServerLevel sl && shinyBoostActiveIn(sl)) {
-                            effective *= 2.0;
-                        }
-                    } catch (Throwable ignored) { /* optional */ }
-
-                    final double p0 = 1.0 / 4096.0;
-                    final int rolls  = Math.max(1, (int) Math.ceil(effective));
-                    ThreadLocalRandom rnd = ThreadLocalRandom.current();
-                    for (int i = 0; i < rolls; i++) {
-                        if (rnd.nextDouble() < p0) {
-                            Method setShiny = find(pokemon.getClass(), "setShiny", boolean.class);
-                            if (setShiny != null) setShiny.invoke(pokemon, Boolean.TRUE);
-                            break;
-                        }
-                    }
-                } catch (Throwable ignored) {}
-            });
+    private static void callSetter(Object ev, String name, Class<?> argType, Object value) {
+        try {
+            Method m = find(ev.getClass(), name, argType);
+            if (m != null) m.invoke(ev, value);
         } catch (Throwable ignored) {}
     }
 }

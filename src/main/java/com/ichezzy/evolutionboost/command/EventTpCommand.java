@@ -1,57 +1,48 @@
 package com.ichezzy.evolutionboost.command;
 
-import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import com.ichezzy.evolutionboost.ticket.TicketManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 public final class EventTpCommand {
-    private EventTpCommand() {}
+    private EventTpCommand(){}
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
-        d.register(Commands.literal("eventtp")
+        var subtree = Commands.literal("event")
                 .requires(src -> src.hasPermission(2))
-
-                // /eventtp halloween
-                .then(Commands.literal("halloween").executes(ctx -> {
-                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                    boolean ok = TicketManager.startManual(p, TicketManager.Target.HALLOWEEN);
-                    if (!ok) {
-                        ctx.getSource().sendFailure(Component.literal("[EventTP] Already in a session – use /eventtp return first."));
-                        return 0;
-                    }
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to Halloween."), false);
-                    return 1;
-                }))
-
-                // /eventtp safari
-                .then(Commands.literal("safari").executes(ctx -> {
-                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                    boolean ok = TicketManager.startManual(p, TicketManager.Target.SAFARI);
-                    if (!ok) {
-                        ctx.getSource().sendFailure(Component.literal("[EventTP] Already in a session – use /eventtp return first."));
-                        return 0;
-                    }
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to Safari Zone."), false);
-                    return 1;
-                }))
-
-                // /eventtp christmas
-                .then(Commands.literal("christmas").executes(ctx -> {
-                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                    boolean ok = TicketManager.startManual(p, TicketManager.Target.CHRISTMAS);
-                    if (!ok) {
-                        ctx.getSource().sendFailure(Component.literal("[EventTP] Already in a session – use /eventtp return first."));
-                        return 0;
-                    }
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to Christmas."), false);
-                    return 1;
-                }))
-
-                // /eventtp return
+                .then(Commands.literal("tp")
+                        .then(Commands.argument("dimension", DimensionArgument.dimension())
+                                .executes(ctx -> {
+                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
+                                    ServerLevel dst = DimensionArgument.getDimension(ctx, "dimension");
+                                    TicketManager.Target tgt = TicketManager.Target.from(dst.dimension().location().getPath());
+                                    if (tgt == null) {
+                                        // erlaub nur event:* Ziele
+                                        if (!dst.dimension().location().getNamespace().equals("event")) {
+                                            ctx.getSource().sendFailure(Component.literal("[EventTP] Only 'event:*' dimensions are allowed."));
+                                            return 0;
+                                        }
+                                        // Manuell: kein Timer, kein Mode-Wechsel
+                                        var pos = TicketManager.getSpawn(TicketManager.Target.SAFARI);
+                                        p.teleportTo(dst, pos.getX() + .5, pos.getY(), pos.getZ() + .5, p.getYRot(), p.getXRot());
+                                        ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported."), false);
+                                        return 1;
+                                    }
+                                    boolean ok = TicketManager.startManual(p, tgt);
+                                    if (!ok) {
+                                        ctx.getSource().sendFailure(Component.literal("[EventTP] Already in a session – use /evolutionboost event return first."));
+                                        return 0;
+                                    }
+                                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to "+tgt.key()+"."), false);
+                                    return 1;
+                                })
+                        )
+                )
                 .then(Commands.literal("return").executes(ctx -> {
                     ServerPlayer p = ctx.getSource().getPlayerOrException();
                     boolean ok = TicketManager.returnNow(p);
@@ -62,69 +53,23 @@ public final class EventTpCommand {
                     ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Returned."), false);
                     return 1;
                 }))
+                // setspawn: /eb event setspawn <halloween|safari|christmas>
+                .then(Commands.literal("setspawn")
+                        .then(Commands.literal("halloween").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.HALLOWEEN)))
+                        .then(Commands.literal("safari").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.SAFARI)))
+                        .then(Commands.literal("christmas").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.CHRISTMAS)))
+                );
 
-                // /eventtp halloween setspawn
-                .then(Commands.literal("halloween")
-                        .then(Commands.literal("setspawn").executes(ctx -> {
-                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                            var pos = p.blockPosition();
+        // unter /evolutionboost und /eb aufhängen
+        d.register(Commands.literal("evolutionboost").then(subtree));
+        d.register(Commands.literal("eb").then(subtree));
+    }
 
-                            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-                            cfg.putSpawn("halloween", new EvolutionBoostConfig.Spawn(
-                                    p.serverLevel().dimension().location().toString(),
-                                    pos.getX(), pos.getY(), pos.getZ()
-                            ));
-                            EvolutionBoostConfig.save();
-
-                            TicketManager.setSpawn(TicketManager.Target.HALLOWEEN, pos);
-
-                            ctx.getSource().sendSuccess(() -> Component.literal(
-                                    "[EventTP] Halloween spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
-                            return 1;
-                        }))
-                )
-
-                // /eventtp safari setspawn
-                .then(Commands.literal("safari")
-                        .then(Commands.literal("setspawn").executes(ctx -> {
-                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                            var pos = p.blockPosition();
-
-                            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-                            cfg.putSpawn("safari", new EvolutionBoostConfig.Spawn(
-                                    p.serverLevel().dimension().location().toString(),
-                                    pos.getX(), pos.getY(), pos.getZ()
-                            ));
-                            EvolutionBoostConfig.save();
-
-                            TicketManager.setSpawn(TicketManager.Target.SAFARI, pos);
-
-                            ctx.getSource().sendSuccess(() -> Component.literal(
-                                    "[EventTP] Safari spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
-                            return 1;
-                        }))
-                )
-
-                // /eventtp christmas setspawn
-                .then(Commands.literal("christmas")
-                        .then(Commands.literal("setspawn").executes(ctx -> {
-                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                            var pos = p.blockPosition();
-
-                            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-                            cfg.putSpawn("christmas", new EvolutionBoostConfig.Spawn(
-                                    p.serverLevel().dimension().location().toString(),
-                                    pos.getX(), pos.getY(), pos.getZ()
-                            ));
-                            EvolutionBoostConfig.save();
-
-                            TicketManager.setSpawn(TicketManager.Target.CHRISTMAS, pos);
-
-                            ctx.getSource().sendSuccess(() -> Component.literal(
-                                    "[EventTP] Christmas spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
-                            return 1;
-                        }))
-                )
-        );
+    private static int setSpawn(CommandSourceStack src, TicketManager.Target t) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer p = src.getPlayerOrException();
+        var pos = p.blockPosition();
+        TicketManager.setSpawn(t, pos);
+        src.sendSuccess(() -> Component.literal("[EventTP] "+t.key()+" spawn set to " + pos.getX()+" "+pos.getY()+" "+pos.getZ()), false);
+        return 1;
     }
 }

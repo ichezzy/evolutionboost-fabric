@@ -14,10 +14,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Globale EvolutionBoost-Config (main.json)
- * Pfad: /config/evolutionboost/main.json
+ * Globale EvolutionBoost-Config (evolutionboost.json)
+ * Pfad: /config/evolutionboost/evolutionboost.json
  *
- * Beinhaltet u. a. Event-Spawns (z. B. "halloween", "safari") und Basiseinstellungen.
+ * Enthält: Event-Spawns, globale Settings und Christmas-Event-Settings.
  */
 public final class EvolutionBoostConfig {
 
@@ -34,16 +34,25 @@ public final class EvolutionBoostConfig {
         public BlockPos toBlockPos() { return new BlockPos(x, y, z); }
     }
 
-    /** z. B. "halloween" -> Spawn, "safari" -> Spawn */
+    /** z. B. "halloween" -> Spawn, "safari" -> Spawn, "christmas" -> Spawn */
     public Map<String, Spawn> eventSpawns = new LinkedHashMap<>();
 
-    /** Basiseinstellungen */
-    public double  maxBoostMultiplier   = 10.0;
-    public boolean shinyCharmEnabled    = false;
-    public int     shinyCharmTargetOdds = 2048;
+    /** Globale Beispiel-Settings */
+    public double maxBoostMultiplier = 10.0;
+    public boolean shinyCharmEnabled = false;
+    public int shinyCharmTargetOdds = 2048;
 
-    /** NEU: Debug für Halloween-TimeLock in Haupt-Config */
-    public boolean halloweenDebug = false;
+    /** NEU: Christmas-Event Settings */
+    public boolean christmasDebug = false;
+    /** Ein Blizzard pro ... Minuten (z. B. 60) */
+    public int christmasStormEveryMinutes = 60;
+    /** Dauer pro Blizzard in Minuten (z. B. 6) */
+    public int christmasStormDurationMinutes = 6;
+    /** Sichtreduktions-Faktor während Blizzard (nur Info/Servereffekte; Client-Fog optional) */
+    public double christmasVisibilityFactor = 0.7;
+    /** Dimensionale Multiplikatoren, die NUR während Blizzard gelten: */
+    public double christmasXpMultiplierDuringStorm = 2.0;
+    public double christmasShinyMultiplierDuringStorm = 1.5;
 
     private static volatile EvolutionBoostConfig INSTANCE;
 
@@ -73,7 +82,7 @@ public final class EvolutionBoostConfig {
         try {
             Path dir = Path.of("config", "evolutionboost");
             Files.createDirectories(dir);
-            Path file = dir.resolve("main.json");
+            Path file = dir.resolve("evolutionboost.json");
 
             if (Files.exists(file)) {
                 try (BufferedReader br = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
@@ -96,7 +105,7 @@ public final class EvolutionBoostConfig {
         try {
             Path dir = Path.of("config", "evolutionboost");
             Files.createDirectories(dir);
-            Path file = dir.resolve("main.json");
+            Path file = dir.resolve("evolutionboost.json");
             try (BufferedWriter bw = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
                 GSON.toJson(INSTANCE, bw);
             }
@@ -105,14 +114,21 @@ public final class EvolutionBoostConfig {
 
     private static EvolutionBoostConfig defaults() {
         EvolutionBoostConfig c = new EvolutionBoostConfig();
-        // Keine Defaults für Spawns gesetzt – Admin kann mit /eventtp <x> setspawn schreiben.
         c.maxBoostMultiplier = 10.0;
         c.shinyCharmEnabled = false;
         c.shinyCharmTargetOdds = 2048;
-        c.halloweenDebug = false;
+
+        // Christmas defaults
+        c.christmasDebug = false;
+        c.christmasStormEveryMinutes = 60;
+        c.christmasStormDurationMinutes = 6;
+        c.christmasVisibilityFactor = 0.7;
+        c.christmasXpMultiplierDuringStorm = 2.0;
+        c.christmasShinyMultiplierDuringStorm = 1.5;
+
         return c;
     }
 
     public Spawn getSpawn(String key) { return eventSpawns.get(key); }
-    public void  putSpawn(String key, Spawn spawn) { eventSpawns.put(key, spawn); }
+    public void putSpawn(String key, Spawn spawn) { eventSpawns.put(key, spawn); }
 }
