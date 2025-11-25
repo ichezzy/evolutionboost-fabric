@@ -3,7 +3,8 @@ package com.ichezzy.evolutionboost.reward;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.ichezzy.evolutionboost.EvolutionBoost;
-import com.ichezzy.evolutionboost.item.ModItems;
+import com.ichezzy.evolutionboost.configs.RewardConfig;
+import com.ichezzy.evolutionboost.configs.RewardConfig.RewardItem;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -32,8 +33,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Rewards mit serverseitiger Realzeit (CET/CEST) + weltgebundener, menschenlesbarer Persistenz.
+ *
  * - Eligibility (Properties): /config/evolutionboost/rewards/eligibility.properties
+ *   -> wer ist DONATOR / GYM / STAFF (RewardCommand nutzt das)
+ *
  * - State (JSON):            <world>/evolutionboost/rewards_state.json
+ *   -> wann hat welcher Spieler was zuletzt geclaimt
+ *
+ * - Item-Definitionen:       RewardConfig (config/evolutionboost/rewards/rewards.json)
+ *   -> welche Items bei DAILY/WEEKLY/MONTHLY_* droppen
  */
 public final class RewardManager {
     private RewardManager() {}
@@ -41,7 +49,8 @@ public final class RewardManager {
     /* ================== Storage / Pfade ================== */
 
     private static final ZoneId ZONE_CET = ZoneId.of("Europe/Berlin");
-    private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZONE_CET);
+    private static final DateTimeFormatter TS_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZONE_CET);
 
     private static final Map<UUID, PlayerRewardState> STATE = new ConcurrentHashMap<>();
     private static final Map<UUID, String> LAST_NAMES = new ConcurrentHashMap<>();
@@ -57,11 +66,13 @@ public final class RewardManager {
     private static Path configDir() {
         return FabricLoader.getInstance().getConfigDir().resolve(EvolutionBoost.MOD_ID);
     }
+
     private static Path rewardsConfigDir() {
         Path p = configDir().resolve("rewards");
         try { Files.createDirectories(p); } catch (IOException ignored) {}
         return p;
     }
+
     private static Path eligibilityFile() {
         return rewardsConfigDir().resolve("eligibility.properties");
     }
@@ -76,6 +87,7 @@ public final class RewardManager {
         try { Files.createDirectories(sub); } catch (IOException ignored) {}
         return sub;
     }
+
     private static Path stateFileWorld() {
         return worldRootDir().resolve("rewards_state.json");
     }
@@ -89,7 +101,13 @@ public final class RewardManager {
         SERVER = server;
         try { Files.createDirectories(configDir()); } catch (IOException ignored) {}
 
+        // Eligibility-Listen laden/erzeugen
         loadEligibility();
+
+        // NEU: Rewards-Config laden/erzeugen → sorgt dafür, dass rewards.json beim Start angelegt wird
+        RewardConfig.get();
+
+        // State migrieren + laden
         migrateLegacyStateIfNeeded();
         loadState();
     }
@@ -97,6 +115,7 @@ public final class RewardManager {
     public static void saveAll() {
         saveState();
         saveEligibility();
+        // RewardConfig wird nur über RewardConfig.save() geschrieben, falls du später etwas änderst.
     }
 
     /* ================== Public API ================== */
@@ -168,12 +187,14 @@ public final class RewardManager {
         UUID id = p.getUUID();
         LAST_NAMES.put(id, safeName(p));
 
+        // Eligibility nur für Monthly (Donator / Gym / Staff)
         if ((type == RewardType.MONTHLY_DONATOR || type == RewardType.MONTHLY_GYM || type == RewardType.MONTHLY_STAFF)
                 && !isEligibleMonthly(p, type)) {
             p.sendSystemMessage(Component.literal("[Rewards] You are not eligible for this monthly reward.")
                     .withStyle(ChatFormatting.RED));
             return false;
         }
+
         long s = secondsUntilNext(p, type);
         if (s > 0) {
             p.sendSystemMessage(Component.literal("[Rewards] Not ready. ")
@@ -182,33 +203,10 @@ public final class RewardManager {
             return false;
         }
 
-        // === Grant items ===
-        switch (type) {
-            case DAILY -> {
-                // Wunsch: 5x Kupfer-Münze
-                giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_BRONZE, 5));
-            }
-            case WEEKLY -> {
-                giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_SILVER, 2));
-            }
-            case MONTHLY_DONATOR -> {
-                giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_GOLD));
-                giveOrDrop(p, new ItemStack(ModItems.EVENT_VOUCHER_BLANK));
-                // *** CRD Tickets temporär entfernt ***
-                giveExternal(p, "wanteditems:cobblemon_lucky_box", 5);
-                giveExternal(p, "wanteditems:gold_candy_lucky_box", 5);
-                giveExternal(p, "wanteditems:ancient_poke_ball_lucky_box", 5);
-            }
-            case MONTHLY_GYM -> {
-                giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_GOLD));
-                // *** CRD Tickets temporär entfernt ***
-            }
-            case MONTHLY_STAFF -> {
-                // Staff: 1x Gold-Münze
-                giveOrDrop(p, new ItemStack(ModItems.EVOLUTION_COIN_GOLD));
-            }
-        }
+        // === Items aus RewardConfig geben ===
+        grantConfiguredRewards(p, type);
 
+        // Timestamp & History
         stampClaim(id, type);
         p.sendSystemMessage(Component.literal("[Rewards] Claimed ")
                 .append(Component.literal(typeReadable(type)).withStyle(ChatFormatting.GOLD))
@@ -216,6 +214,39 @@ public final class RewardManager {
                 .append(Component.literal(TS_FMT.format(Instant.now())).withStyle(ChatFormatting.GRAY))
                 .withStyle(ChatFormatting.LIGHT_PURPLE));
         return true;
+    }
+
+    /**
+     * Holt für den gegebenen RewardType die Items aus der RewardConfig
+     * und gibt sie dem Spieler.
+     *
+     * Mapping:
+     *   DAILY            -> key "DAILY"
+     *   WEEKLY           -> key "WEEKLY"
+     *   MONTHLY_DONATOR  -> key "MONTHLY_DONATOR"
+     *   MONTHLY_GYM      -> key "MONTHLY_GYM"
+     *   MONTHLY_STAFF    -> key "MONTHLY_STAFF"
+     */
+    private static void grantConfiguredRewards(ServerPlayer p, RewardType type) {
+        RewardConfig cfg = RewardConfig.get();
+        String key = type.name(); // direkt den Enum-Namen verwenden
+
+        List<RewardItem> items = cfg.rewards.get(key);
+        if (items == null || items.isEmpty()) {
+            EvolutionBoost.LOGGER.warn("[rewards] No rewards configured for type '{}', nothing granted.", key);
+            return;
+        }
+
+        for (RewardItem ri : items) {
+            if (ri == null || ri.id == null || ri.id.isBlank()) continue;
+            int count = ri.count <= 0 ? 1 : ri.count;
+            ItemStack stack = stackFromId(p, ri.id, count);
+            if (!stack.isEmpty()) {
+                giveOrDrop(p, stack);
+            } else {
+                EvolutionBoost.LOGGER.warn("[rewards] Missing or invalid item '{}' for type '{}', skipping.", ri.id, key);
+            }
+        }
     }
 
     /* ================== Cooldowns & Eligibility ================== */
@@ -258,20 +289,29 @@ public final class RewardManager {
 
     public static void setDonatorEligibility(String playerName, boolean donator) {
         String key = normalizeName(playerName);
-        synchronized (ALLOWED_DONATOR) { if (donator) ALLOWED_DONATOR.add(key); else ALLOWED_DONATOR.remove(key); }
+        synchronized (ALLOWED_DONATOR) {
+            if (donator) ALLOWED_DONATOR.add(key);
+            else ALLOWED_DONATOR.remove(key);
+        }
         saveEligibility();
     }
 
     public static void setGymEligibility(String playerName, boolean gym) {
         String key = normalizeName(playerName);
-        synchronized (ALLOWED_GYM) { if (gym) ALLOWED_GYM.add(key); else ALLOWED_GYM.remove(key); }
+        synchronized (ALLOWED_GYM) {
+            if (gym) ALLOWED_GYM.add(key);
+            else ALLOWED_GYM.remove(key);
+        }
         saveEligibility();
     }
 
     /** NEU: Staff-Eligibility. */
     public static void setStaffEligibility(String playerName, boolean staff) {
         String key = normalizeName(playerName);
-        synchronized (ALLOWED_STAFF) { if (staff) ALLOWED_STAFF.add(key); else ALLOWED_STAFF.remove(key); }
+        synchronized (ALLOWED_STAFF) {
+            if (staff) ALLOWED_STAFF.add(key);
+            else ALLOWED_STAFF.remove(key);
+        }
         saveEligibility();
     }
 
@@ -366,7 +406,7 @@ public final class RewardManager {
         return (p == null || p.getGameProfile() == null) ? "-" : p.getGameProfile().getName();
     }
 
-    /** NEU: wieder eingeführt, da von Commands verwendet. */
+    /** Timestamp + History + Save. */
     private static void stampClaim(UUID uuid, RewardType t) {
         PlayerRewardState st = STATE.computeIfAbsent(uuid, id -> new PlayerRewardState());
         Instant now = Instant.now();
@@ -431,7 +471,7 @@ public final class RewardManager {
                 String k = normalizeName(n);
                 if (!k.isEmpty()) ALLOWED_GYM.add(k);
             }
-            for (String n : props.getProperty("staff", "").split(",")) { // NEU
+            for (String n : props.getProperty("staff", "").split(",")) {
                 String k = normalizeName(n);
                 if (!k.isEmpty()) ALLOWED_STAFF.add(k);
             }
@@ -446,7 +486,7 @@ public final class RewardManager {
             Properties props = new Properties();
             props.setProperty("donator", String.join(",", ALLOWED_DONATOR));
             props.setProperty("gym", String.join(",", ALLOWED_GYM));
-            props.setProperty("staff", String.join(",", ALLOWED_STAFF)); // NEU
+            props.setProperty("staff", String.join(",", ALLOWED_STAFF));
             try (var w = Files.newBufferedWriter(eligibilityFile(), StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
                 props.store(w, "Rewards eligibility (names, case-insensitive)  |  Syntax:  donator=a,b   gym=c,d   staff=e,f");
@@ -506,7 +546,7 @@ public final class RewardManager {
                     st.weekly         = parseInstant(pe.last.get("WEEKLY"));
                     st.monthlyDonator = parseInstant(pe.last.get("MONTHLY_DONATOR"));
                     st.monthlyGym     = parseInstant(pe.last.get("MONTHLY_GYM"));
-                    st.monthlyStaff   = parseInstant(pe.last.get("MONTHLY_STAFF")); // NEU
+                    st.monthlyStaff   = parseInstant(pe.last.get("MONTHLY_STAFF"));
                 }
                 if (pe.claims != null) {
                     for (RewardData.Claim c : pe.claims) {
@@ -545,7 +585,7 @@ public final class RewardManager {
                 if (st.weekly         != null) pe.last.put("WEEKLY",           st.weekly.toString());
                 if (st.monthlyDonator != null) pe.last.put("MONTHLY_DONATOR",  st.monthlyDonator.toString());
                 if (st.monthlyGym     != null) pe.last.put("MONTHLY_GYM",      st.monthlyGym.toString());
-                if (st.monthlyStaff   != null) pe.last.put("MONTHLY_STAFF",    st.monthlyStaff.toString()); // NEU
+                if (st.monthlyStaff   != null) pe.last.put("MONTHLY_STAFF",    st.monthlyStaff.toString());
 
                 if (!st.history.isEmpty()) {
                     pe.claims = new ArrayList<>(st.history.size());
@@ -618,6 +658,7 @@ public final class RewardManager {
                 case MONTHLY_STAFF    -> monthlyStaff;
             };
         }
+
         void setLast(RewardType t, Instant when) {
             switch (t) {
                 case DAILY -> daily = when;
@@ -627,6 +668,7 @@ public final class RewardManager {
                 case MONTHLY_STAFF -> monthlyStaff = when;
             }
         }
+
         void clear(RewardType t) {
             switch (t) {
                 case DAILY -> daily = null;
@@ -636,6 +678,7 @@ public final class RewardManager {
                 case MONTHLY_STAFF -> monthlyStaff = null;
             }
         }
+
         void addHistory(RewardType t, Instant at) {
             history.add(new HistoryEntry(t, at));
         }
