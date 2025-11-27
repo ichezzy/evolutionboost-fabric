@@ -41,7 +41,10 @@ public final class BoostCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
 
+        // WICHTIG: OP-Gate direkt am "boost"-Literal,
+        // NICHT an "evolutionboost"/"eb", damit /eb rewards weiter für alle geht.
         var boostRoot = Commands.literal("boost")
+                .requires(src -> src.hasPermission(2))  // <- nur OP (Permission-Level 2)
 
                 // ==================== /evolutionboost boost add ... ====================
                 .then(Commands.literal("add")
@@ -282,9 +285,10 @@ public final class BoostCommand {
                         )
                 );
 
-        // unter /evolutionboost … und /eb …
-        d.register(Commands.literal("evolutionboost").requires(s -> s.hasPermission(2)).then(boostRoot));
-        d.register(Commands.literal("eb").requires(s -> s.hasPermission(2)).then(boostRoot));
+        // Unter /evolutionboost und /eb anhängen – OHNE requires hier,
+        // damit /evolutionboost rewards … weiterhin allen offen steht.
+        d.register(Commands.literal("evolutionboost").then(boostRoot));
+        d.register(Commands.literal("eb").then(boostRoot));
     }
 
     private static BoostType parseType(String s) {

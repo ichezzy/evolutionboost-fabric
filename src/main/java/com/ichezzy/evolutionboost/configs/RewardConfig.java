@@ -153,7 +153,7 @@ public final class RewardConfig {
 
         // WEEKLY: 2x Silber-Münze
         c.rewards.put("WEEKLY", List.of(
-                new RewardItem("evolutionboost:evolution_coin_silver", 2)
+                new RewardItem("evolutionboost:evolution_coin_silver", 1)
         ));
 
         // MONTHLY_DONATOR
@@ -173,14 +173,6 @@ public final class RewardConfig {
         // MONTHLY_STAFF
         c.rewards.put("MONTHLY_STAFF", List.of(
                 new RewardItem("evolutionboost:evolution_coin_gold", 1)
-        ));
-
-        // Beispiele für frei definierbare Gruppen
-        c.rewards.put("gym_leader", List.of(
-                new RewardItem("minecraft:diamond", 32)
-        ));
-        c.rewards.put("donator_extra", List.of(
-                new RewardItem("minecraft:emerald", 1)
         ));
 
         return c;
