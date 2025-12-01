@@ -19,8 +19,10 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/** Hält aktive Boosts (GLOBAL + PLAYER) und persistiert sie.
- *  PLUS: nicht-persistente Dimension-Multiplikatoren (zur Laufzeit per Commands/Events). */
+/**
+ * Hält aktive Boosts (nur noch GLOBAL) und persistiert sie.
+ * PLUS: nicht-persistente Dimension-Multiplikatoren (zur Laufzeit per Commands/Events).
+ */
 public class BoostManager extends SavedData {
     private static final String SAVE_KEY = EvolutionBoost.MOD_ID + "_boosts";
 
@@ -51,20 +53,20 @@ public class BoostManager extends SavedData {
     }
 
     // ---------- Persistence ----------
+
     public static BoostManager load(CompoundTag tag, HolderLookup.Provider lookup) {
         BoostManager m = new BoostManager();
         ListTag list = tag.getList("boosts", 10); // 10 = Compound
         for (int i = 0; i < list.size(); i++) {
             CompoundTag t = list.getCompound(i);
             BoostType type = BoostType.valueOf(t.getString("type"));
-            BoostScope scope = BoostScope.valueOf(t.getString("scope"));
+            String scopeRaw = t.getString("scope");
+            BoostScope scope = BoostScope.fromPersistent(scopeRaw);
             double mult = t.getDouble("mult");
             long duration = t.getLong("duration");
-            UUID player = t.contains("player") ? UUID.fromString(t.getString("player")) : null;
             String key = t.getString("key");
-            String pname = t.contains("pname") ? t.getString("pname") : null;
 
-            ActiveBoost ab = new ActiveBoost(type, scope, mult, duration, player, pname);
+            ActiveBoost ab = new ActiveBoost(type, scope, mult, duration);
             ab.bossBarId = key;
             m.active.put(key, ab);
         }
@@ -82,8 +84,6 @@ public class BoostManager extends SavedData {
             t.putDouble("mult", ab.multiplier);
             t.putLong("start", ab.startTimeMs);
             t.putLong("duration", ab.durationMs);
-            if (ab.player != null) t.putString("player", ab.player.toString());
-            if (ab.playerName != null) t.putString("pname", ab.playerName);
             t.putString("key", e.getKey());
             list.add(t);
         }
@@ -92,6 +92,7 @@ public class BoostManager extends SavedData {
     }
 
     // ---------- API: hinzufügen/entfernen ----------
+
     public String addBoost(MinecraftServer server, ActiveBoost ab) {
         String key = makeKey(ab);
         ab.bossBarId = key;
@@ -104,16 +105,6 @@ public class BoostManager extends SavedData {
     public int clearGlobal(BoostType typeOrNull) {
         var keys = active.entrySet().stream()
                 .filter(e -> e.getValue().scope == BoostScope.GLOBAL)
-                .filter(e -> typeOrNull == null || e.getValue().type == typeOrNull)
-                .map(Map.Entry::getKey).collect(Collectors.toList());
-        keys.forEach(this::removeActiveAndBar);
-        return keys.size();
-    }
-
-    public int clearPlayer(UUID player, BoostType typeOrNull) {
-        var keys = active.entrySet().stream()
-                .filter(e -> e.getValue().scope == BoostScope.PLAYER)
-                .filter(e -> Objects.equals(e.getValue().player, player))
                 .filter(e -> typeOrNull == null || e.getValue().type == typeOrNull)
                 .map(Map.Entry::getKey).collect(Collectors.toList());
         keys.forEach(this::removeActiveAndBar);
@@ -133,6 +124,7 @@ public class BoostManager extends SavedData {
     }
 
     // ---------- Dimension-API ----------
+
     public void setDimensionMultiplier(BoostType type, ResourceKey<Level> dim, double multiplier) {
         if (dim == null) return;
         dimensionMults.get(type).put(dim, Math.max(0.0, multiplier));
@@ -153,25 +145,21 @@ public class BoostManager extends SavedData {
         return dimensionMults.get(type).getOrDefault(dim, 1.0);
     }
 
-    // ---------- Abfrage ----------
-    /** Kompat: nur Global + Player. */
-    public double getMultiplierFor(BoostType type, UUID playerOrNull) {
+    /** Kompat-Overload – player wird ignoriert. */
+    public double getMultiplierFor(BoostType type, java.util.UUID playerOrNull) {
         return getMultiplierFor(type, playerOrNull, null);
     }
 
-    /** Kombiniert Global × Dimension × (optional Player). */
-    public double getMultiplierFor(BoostType type, UUID playerOrNull, ResourceKey<Level> dimOrNull) {
+    /** GLOBAL × DIMENSION. Player-spezifische Boosts existieren nicht mehr. */
+    public double getMultiplierFor(BoostType type, java.util.UUID ignoredPlayer, ResourceKey<Level> dimOrNull) {
         long now = System.currentTimeMillis();
         double mult = 1.0;
 
         for (ActiveBoost ab : active.values()) {
             if (ab.type != type) continue;
             if (ab.endTimeMs < now) continue;
-            if (ab.scope == BoostScope.GLOBAL) {
-                mult *= ab.multiplier;
-            } else if (playerOrNull != null && playerOrNull.equals(ab.player)) {
-                mult *= ab.multiplier;
-            }
+            // es gibt nur GLOBAL-Boosts
+            mult *= ab.multiplier;
         }
 
         mult *= getDimensionMultiplier(type, dimOrNull);
@@ -179,6 +167,7 @@ public class BoostManager extends SavedData {
     }
 
     // ---------- Tick / Bossbars ----------
+
     public void tick(MinecraftServer server) {
         long now = System.currentTimeMillis();
         List<String> toRemove = new ArrayList<>();
@@ -186,15 +175,18 @@ public class BoostManager extends SavedData {
             String key = entry.getKey();
             ActiveBoost ab = entry.getValue();
             long left = ab.millisLeft(now);
-            if (left <= 0) { toRemove.add(key); continue; }
+            if (left <= 0) {
+                toRemove.add(key);
+                continue;
+            }
             updateBossbar(server, ab, left);
         }
         toRemove.forEach(this::removeActiveAndBar);
     }
 
     private static String makeKey(ActiveBoost ab) {
-        if (ab.scope == BoostScope.GLOBAL) return ab.type.name() + "@GLOBAL";
-        return ab.type.name() + "@" + ab.player; // <-- Instanzfeld, kein statischer Zugriff
+        // aktuell maximal ein GLOBAL-Boost pro Typ
+        return ab.type.name() + "@GLOBAL";
     }
 
     private void createOrUpdateBossbar(MinecraftServer server, ActiveBoost ab) {
@@ -205,11 +197,11 @@ public class BoostManager extends SavedData {
             bar = new ServerBossEvent(titleFor(ab, ab.durationMs), color, overlay);
             bossbars.put(ab.bossBarId, bar);
         }
-        if (ab.scope == BoostScope.GLOBAL) {
-            for (ServerPlayer sp : server.getPlayerList().getPlayers()) bar.addPlayer(sp);
-        } else if (ab.player != null) {
-            ServerPlayer sp = server.getPlayerList().getPlayer(ab.player);
-            if (sp != null) bar.addPlayer(sp);
+        // GLOBAL -> alle Spieler
+        for (ServerPlayer sp : server.getPlayerList().getPlayers()) {
+            if (!bar.getPlayers().contains(sp)) {
+                bar.addPlayer(sp);
+            }
         }
         updateBossbar(server, ab, ab.millisLeft(System.currentTimeMillis()));
     }
@@ -220,12 +212,11 @@ public class BoostManager extends SavedData {
         float progress = Math.max(0f, Math.min(1f, (float) leftMs / (float) ab.durationMs));
         bar.setProgress(progress);
         bar.setName(titleFor(ab, leftMs));
-        if (ab.scope == BoostScope.GLOBAL) {
-            for (ServerPlayer sp : server.getPlayerList().getPlayers())
-                if (!bar.getPlayers().contains(sp)) bar.addPlayer(sp);
-        } else if (ab.player != null) {
-            ServerPlayer sp = server.getPlayerList().getPlayer(ab.player);
-            if (sp != null && !bar.getPlayers().contains(sp)) bar.addPlayer(sp);
+
+        for (ServerPlayer sp : server.getPlayerList().getPlayers()) {
+            if (!bar.getPlayers().contains(sp)) {
+                bar.addPlayer(sp);
+            }
         }
     }
 
@@ -238,20 +229,12 @@ public class BoostManager extends SavedData {
         }
     }
 
+    /** Neuer, hübscher Titel für die Bossbar. */
     private Component titleFor(ActiveBoost ab, long leftMs) {
-        String scope = ab.scope == BoostScope.GLOBAL ? "GLOBAL" : "PLAYER";
-        String who = ab.scope == BoostScope.PLAYER
-                ? " (" + (ab.playerName != null ? ab.playerName : String.valueOf(ab.player)) + ")"
-                : "";
         String timer = formatDuration(leftMs);
-        String txt = scope + " " + ab.type + " BOOST x" + ab.multiplier + " " + timer + who;
+        String txt = "[EVOLUTIONBOOST] GLOBAL " + ab.type + " x" + ab.multiplier + " " + timer;
 
-        var color = switch (ab.type) {
-            case SHINY -> ChatFormatting.GOLD;
-            case XP    -> ChatFormatting.GREEN;
-            case DROP  -> ChatFormatting.BLUE;
-            case IV    -> ChatFormatting.DARK_PURPLE;
-        };
+        ChatFormatting color = BoostColors.chatColor(ab.type);
         return Component.literal(txt).setStyle(Style.EMPTY.withColor(color).withBold(true));
     }
 

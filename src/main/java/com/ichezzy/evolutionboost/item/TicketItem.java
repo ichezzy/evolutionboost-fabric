@@ -1,6 +1,5 @@
 package com.ichezzy.evolutionboost.item;
 
-import com.ichezzy.evolutionboost.ticket.TicketManager;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.item.Item;

@@ -1,4 +1,4 @@
-package com.ichezzy.evolutionboost.ticket;
+package com.ichezzy.evolutionboost.item;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;

@@ -1,7 +1,6 @@
 package com.ichezzy.evolutionboost.item;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
-import com.ichezzy.evolutionboost.ticket.TicketManager;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -33,7 +32,7 @@ public final class ModItems {
     // ---- Halloween Platzhalter ----
     public static final Item HALLOWEEN_CANDY = register(
             "halloween_candy",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.halloween_candy")
     );
 
@@ -137,7 +136,7 @@ public final class ModItems {
 
     public static final Item EVENT_VOUCHER_XP = register(
             "event_voucher_xp",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.voucher_xp")
     );
 
@@ -149,13 +148,13 @@ public final class ModItems {
 
     public static final Item EVENT_VOUCHER_DROP = register(
             "event_voucher_drop",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.voucher_drop")
     );
 
     public static final Item EVENT_VOUCHER_EV = register(
             "event_voucher_ev",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.voucher_ev")
     );
 

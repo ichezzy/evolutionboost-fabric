@@ -2,7 +2,7 @@ package com.ichezzy.evolutionboost;
 
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.BoostCommand;
-import com.ichezzy.evolutionboost.command.EventTpCommand;
+import com.ichezzy.evolutionboost.command.EventCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.configs.CommandLogConfig;
@@ -10,7 +10,7 @@ import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.reward.RewardManager;
-import com.ichezzy.evolutionboost.ticket.TicketManager;
+import com.ichezzy.evolutionboost.item.TicketManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -42,7 +42,7 @@ public class EvolutionBoost implements ModInitializer {
                     // Jeder Command registriert sich unter /evolutionboost UND /eb
                     RewardCommand.register(d);
                     BoostCommand.register(d);
-                    EventTpCommand.register(d);
+                    EventCommand.register(d);
                 }
         );
 

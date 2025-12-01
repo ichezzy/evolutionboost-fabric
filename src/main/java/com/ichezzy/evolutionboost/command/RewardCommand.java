@@ -1,5 +1,6 @@
 package com.ichezzy.evolutionboost.command;
 
+import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.reward.RewardType;
 import com.mojang.brigadier.CommandDispatcher;
@@ -16,6 +17,7 @@ public final class RewardCommand {
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         var subtree = Commands.literal("rewards")
 
+                // ---- Spieler-Kommandos: immer erlaubt ----
                 .then(Commands.literal("info").executes(ctx -> {
                     ServerPlayer p = ctx.getSource().getPlayerOrException();
                     RewardManager.sendInfo(ctx.getSource(), p);
@@ -47,29 +49,41 @@ public final class RewardCommand {
                         )
                 )
 
+                // ---- Admin-Teil: Permission evolutionboost.rewards.admin ----
                 .then(Commands.literal("list")
-                        .requires(src -> src.hasPermission(2))
-                        .then(Commands.literal("donator").executes(ctx -> { RewardManager.sendRoleList(ctx.getSource(), "donator"); return 1; }))
-                        .then(Commands.literal("gym").executes(ctx -> { RewardManager.sendRoleList(ctx.getSource(), "gym"); return 1; }))
-                        .then(Commands.literal("staff").executes(ctx -> { RewardManager.sendRoleList(ctx.getSource(), "staff"); return 1; }))
+                        .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.rewards.admin", 2, false))
+                        .then(Commands.literal("donator").executes(ctx -> {
+                            RewardManager.sendRoleList(ctx.getSource(), "donator");
+                            return 1;
+                        }))
+                        .then(Commands.literal("gym").executes(ctx -> {
+                            RewardManager.sendRoleList(ctx.getSource(), "gym");
+                            return 1;
+                        }))
+                        .then(Commands.literal("staff").executes(ctx -> {
+                            RewardManager.sendRoleList(ctx.getSource(), "staff");
+                            return 1;
+                        }))
                 )
 
                 .then(Commands.literal("set")
-                        .requires(src -> src.hasPermission(2))
+                        .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.rewards.admin", 2, false))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.literal("donator")
                                         .then(Commands.literal("true").executes(ctx -> {
                                             ServerPlayer t = EntityArgument.getPlayer(ctx, "player");
                                             RewardManager.setDonatorEligibility(t.getGameProfile().getName(), true);
                                             ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set DONATOR for ")
-                                                    .append(t.getName()).append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
+                                                    .append(t.getName())
+                                                    .append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
                                             return 1;
                                         }))
                                         .then(Commands.literal("false").executes(ctx -> {
                                             ServerPlayer t = EntityArgument.getPlayer(ctx, "player");
                                             RewardManager.setDonatorEligibility(t.getGameProfile().getName(), false);
                                             ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set DONATOR for ")
-                                                    .append(t.getName()).append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
+                                                    .append(t.getName())
+                                                    .append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
                                             return 1;
                                         }))
                                 )
@@ -78,14 +92,16 @@ public final class RewardCommand {
                                             ServerPlayer t = EntityArgument.getPlayer(ctx, "player");
                                             RewardManager.setGymEligibility(t.getGameProfile().getName(), true);
                                             ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set GYM for ")
-                                                    .append(t.getName()).append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
+                                                    .append(t.getName())
+                                                    .append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
                                             return 1;
                                         }))
                                         .then(Commands.literal("false").executes(ctx -> {
                                             ServerPlayer t = EntityArgument.getPlayer(ctx, "player");
                                             RewardManager.setGymEligibility(t.getGameProfile().getName(), false);
                                             ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set GYM for ")
-                                                    .append(t.getName()).append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
+                                                    .append(t.getName())
+                                                    .append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
                                             return 1;
                                         }))
                                 )
@@ -94,14 +110,16 @@ public final class RewardCommand {
                                             ServerPlayer t = EntityArgument.getPlayer(ctx, "player");
                                             RewardManager.setStaffEligibility(t.getGameProfile().getName(), true);
                                             ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set STAFF for ")
-                                                    .append(t.getName()).append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
+                                                    .append(t.getName())
+                                                    .append(Component.literal(": true").withStyle(ChatFormatting.GREEN)), false);
                                             return 1;
                                         }))
                                         .then(Commands.literal("false").executes(ctx -> {
                                             ServerPlayer t = EntityArgument.getPlayer(ctx, "player");
                                             RewardManager.setStaffEligibility(t.getGameProfile().getName(), false);
                                             ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set STAFF for ")
-                                                    .append(t.getName()).append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
+                                                    .append(t.getName())
+                                                    .append(Component.literal(": false").withStyle(ChatFormatting.RED)), false);
                                             return 1;
                                         }))
                                 )
@@ -109,7 +127,7 @@ public final class RewardCommand {
                 )
 
                 .then(Commands.literal("reset")
-                        .requires(src -> src.hasPermission(2))
+                        .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.rewards.admin", 2, false))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.literal("daily").executes(ctx -> {
                                     ServerPlayer t = EntityArgument.getPlayer(ctx, "player");

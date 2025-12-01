@@ -138,7 +138,7 @@ public final class RewardManager {
                             .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD)
             );
             p.sendSystemMessage(
-                    Component.literal("Tip: /rewards info  or  /rewards claim <type>")
+                    Component.literal("Tip: Use /eb rewards info  or  /eb rewards claim <type>")
                             .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)
             );
         } else {

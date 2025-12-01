@@ -1,157 +1,159 @@
 package com.ichezzy.evolutionboost.compat.cobblemon;
 
+import com.cobblemon.mod.common.api.Priority;
+import com.cobblemon.mod.common.api.events.CobblemonEvents;
+import com.cobblemon.mod.common.api.events.entity.SpawnEvent;
+import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
+import com.cobblemon.mod.common.pokemon.Pokemon;
+import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
+import kotlin.Unit;
+import kotlin.jvm.functions.Function1;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.lang.reflect.Method;
 
-import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.*;
-
 /**
- * Shiny-Chance-Hook (Reflection, robust gegen kleinere API-Änderungen).
- *
- * FINAL_SHINY_FACTOR = BASE × GLOBAL × DIMENSION × (optional PLAYER)
- *
- * - Wir hängen uns an das Cobblemon-Event für den Shiny-Roll.
- * - Konkreter Feldname kann je nach Version variieren, daher nutzen wir subscribeFieldOptional.
+ * Shiny-Hook:
+ * - hängt direkt an CobblemonEvents.POKEMON_ENTITY_SPAWN
+ * - liest den SHINY-Boost (GLOBAL) aus BoostManager
+ * - forciert zusätzliche Shiny-Rolls anhand der shinyBaseOdds-Config
  */
-@SuppressWarnings({"rawtypes","unchecked"})
 public final class ShinyHook {
     private ShinyHook() {}
 
+    /**
+     * Alte Signatur beibehalten, damit HooksRegistrar unverändert bleibt.
+     * clsEvents/priority werden hier nicht benötigt.
+     */
     public static void register(MinecraftServer server, Class<?> clsEvents, Object priority) {
-        // Kandidaten für das Shiny-Event-Feld in CobblemonEvents:
-        // 1.6.x: typischerweise "SHINY_ROLL_EVENT"
-        // ältere/andere Versionen evtl. mit *_PRE oder POKEMON_* Präfix.
-        String[] shinyFieldCandidates = new String[]{
-                "SHINY_ROLL_EVENT",
-                "SHINY_ROLL_EVENT_PRE",
-                "POKEMON_SHINY_ROLL_EVENT",
-                "POKEMON_SHINY_ROLL_EVENT_PRE"
-        };
+        register(server);
+    }
 
-        subscribeFieldOptional(clsEvents, priority, shinyFieldCandidates, ev -> {
-            tryAdjustShiny(server, ev);
-            return unit();
-        });
+    /** Eigentliche Registrierung am Cobblemon-Event. */
+    private static void register(MinecraftServer server) {
+        CobblemonEvents.POKEMON_ENTITY_SPAWN.subscribe(
+                Priority.NORMAL,
+                new Function1<SpawnEvent<PokemonEntity>, Unit>() {
+                    @Override
+                    public Unit invoke(SpawnEvent<PokemonEntity> ev) {
+                        try {
+                            handleSpawn(server, ev);
+                        } catch (Throwable t) {
+                            EvolutionBoost.LOGGER.warn(
+                                    "[compat][shiny] error in spawn handler: {}",
+                                    t.toString()
+                            );
+                        }
+                        return Unit.INSTANCE;
+                    }
+                }
+        );
+
+        EvolutionBoost.LOGGER.info("[compat][shiny] POKEMON_ENTITY_SPAWN hook registered.");
+    }
+
+    /** Wird bei jedem Pokémon-Spawn aufgerufen. */
+    private static void handleSpawn(MinecraftServer server, SpawnEvent<PokemonEntity> ev) {
+        PokemonEntity entity = ev.getEntity();
+        if (entity == null) return;
+
+        // nur Serverseite
+        if (entity.level().isClientSide()) return;
+
+        ResourceKey<Level> dimKey = entity.level().dimension();
+
+        // Aktuell nur GLOBAL-Boost (kein Player-Scope mehr)
+        double mult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null);
+        if (mult <= 1.0) {
+            return; // kein Extra-Boost aktiv
+        }
+
+        Pokemon pokemon = getPokemon(entity);
+        if (pokemon == null) {
+            return;
+        }
+
+        if (isCurrentlyShiny(pokemon)) {
+            // bereits shiny, nichts tun
+            return;
+        }
+
+        // --- Formel basierend auf shinyBaseOdds aus EvolutionBoostConfig ---
+
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        int baseOdds = cfg.shinyBaseOdds <= 0 ? 8192 : cfg.shinyBaseOdds;
+
+        // Basis-Shinychance (z.B. 1/8192)
+        double pb = 1.0 / (double) baseOdds;
+
+        // Extra-Chance, um von pb auf mult * pb zu kommen:
+        // EndChance ~= pb + (1 - pb) * extraChance  ≈ mult * pb
+        // => extraChance ~ (mult - 1) * pb   (für pb << 1)
+        double extraChance = (mult - 1.0) * pb;
+
+        // Begrenzen, damit es nicht völlig eskaliert
+        if (extraChance <= 0.0) return;
+        if (extraChance > 0.95) extraChance = 0.95;
+
+        double roll = entity.level().getRandom().nextDouble();
+        if (roll < extraChance) {
+            setShiny(pokemon, true);
+            EvolutionBoost.LOGGER.debug(
+                    "[compat][shiny] Force-shiny applied (mult={}, dim={}, extraChance={})",
+                    mult, dimKey.location(), extraChance
+            );
+        }
+    }
+
+    /* --------- Reflection-Helper auf Cobblemon-Klassen --------- */
+
+    private static Pokemon getPokemon(PokemonEntity entity) {
+        try {
+            Method m = entity.getClass().getMethod("getPokemon");
+            Object o = m.invoke(entity);
+            if (o instanceof Pokemon p) return p;
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     /**
-     * Versucht, die Shiny-Wahrscheinlichkeit / Shiny-Rolls des Events zu skalieren.
-     * Nutzt:
-     *   BoostManager.get(server).getMultiplierFor(SHINY, playerUuid, levelKey)
+     * Versucht über Reflection herauszufinden, ob das Pokémon bereits shiny ist.
+     * Probiert typische Methoden wie isShiny() / getShiny().
      */
-    private static void tryAdjustShiny(MinecraftServer server, Object ev) {
+    private static boolean isCurrentlyShiny(Pokemon pokemon) {
         try {
-            // Spieler & Welt ermitteln (falls vorhanden)
-            ServerPlayer player = tryPlayer(ev);
-            ServerLevel  level  = tryLevel(ev, server);
+            // 1) isShiny(): Boolean
+            try {
+                Method m = pokemon.getClass().getMethod("isShiny");
+                Object o = m.invoke(pokemon);
+                if (o instanceof Boolean b) return b;
+            } catch (NoSuchMethodException ignored) {}
 
-            // Basischance / Rolls holen
-            Double baseChance = getDouble(ev,
-                    "getChance", "chance",
-                    "getShinyChance", "getBaseChance",
-                    "getRollChance" // falls anders benannt
-            );
-            Integer baseRolls = getInt(ev,
-                    "getRolls", "getShinyRolls", "rolls"
-            );
+            // 2) getShiny(): Boolean
+            try {
+                Method m = pokemon.getClass().getMethod("getShiny");
+                Object o = m.invoke(pokemon);
+                if (o instanceof Boolean b) return b;
+            } catch (NoSuchMethodException ignored) {}
+        } catch (Throwable ignored) {}
+        return false;
+    }
 
-            // Multiplikator aus unserem Boost-System
-            double mult = BoostManager.get(server)
-                    .getMultiplierFor(
-                            BoostType.SHINY,
-                            player != null ? player.getUUID() : null,
-                            level != null ? level.dimension() : null
-                    );
-
-            // Chance skalieren
-            if (baseChance != null) {
-                double newChance = Math.max(0.0, baseChance * mult);
-                callSetter(ev, "setChance",      double.class, newChance);
-                callSetter(ev, "setShinyChance", double.class, newChance);
-                // ggf. alternative Setter-Namen ergänzen, falls nötig
-            }
-
-            // Anzahl Rolls skalieren (immer >=1)
-            if (baseRolls != null) {
-                int newRolls = (int) Math.max(1, Math.round(baseRolls * mult));
-                callSetter(ev, "setRolls",      int.class, newRolls);
-                callSetter(ev, "setShinyRolls", int.class, newRolls);
-            }
-
+    /**
+     * Setzt shiny per Reflection (z.B. setShiny(boolean)).
+     */
+    private static void setShiny(Pokemon pokemon, boolean shiny) {
+        try {
+            Method m = pokemon.getClass().getMethod("setShiny", boolean.class);
+            m.invoke(pokemon, shiny);
         } catch (Throwable ignored) {
-            // Absicht: API-Änderungen sollen keinen Crash verursachen.
+            // Wenn die Methode in einer zukünftigen Version anders heißt,
+            // verhindern wir damit zumindest einen Crash.
         }
-    }
-
-    /* --------------- helpers --------------- */
-
-    private static ServerPlayer tryPlayer(Object ev) {
-        try {
-            Method m = findAny(ev.getClass(),
-                    "getPlayer", "player",
-                    "getServerPlayer", "serverPlayer",
-                    "getTrainer"
-            );
-            if (m != null) {
-                Object o = m.invoke(ev);
-                if (o instanceof ServerPlayer sp) return sp;
-            }
-        } catch (Throwable ignored) {}
-        return null;
-    }
-
-    private static ServerLevel tryLevel(Object ev, MinecraftServer server) {
-        try {
-            Method m = findAny(ev.getClass(), "getLevel", "getWorld", "level", "world");
-            if (m != null) {
-                Object o = m.invoke(ev);
-                if (o instanceof ServerLevel sl) return sl;
-            }
-        } catch (Throwable ignored) {}
-        try {
-            return server.overworld();
-        } catch (Throwable ignored) {}
-        return null;
-    }
-
-    private static Double getDouble(Object ev, String... names) {
-        for (String n : names) {
-            try {
-                Method m = find(ev.getClass(), n);
-                if (m != null) {
-                    Object v = m.invoke(ev);
-                    if (v instanceof Number num) return num.doubleValue();
-                }
-            } catch (Throwable ignored) {}
-        }
-        return null;
-    }
-
-    private static Integer getInt(Object ev, String... names) {
-        for (String n : names) {
-            try {
-                Method m = find(ev.getClass(), n);
-                if (m != null) {
-                    Object v = m.invoke(ev);
-                    if (v instanceof Number num) return num.intValue();
-                }
-            } catch (Throwable ignored) {}
-        }
-        return null;
-    }
-
-    private static void callSetter(Object ev, String name, Class<?> argType, Object value) {
-        try {
-            Method m = find(ev.getClass(), name, argType);
-            if (m != null) {
-                m.setAccessible(true);
-                m.invoke(ev, value);
-            }
-        } catch (Throwable ignored) {}
     }
 }

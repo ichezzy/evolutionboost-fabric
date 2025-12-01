@@ -1,6 +1,7 @@
 package com.ichezzy.evolutionboost.command;
 
-import com.ichezzy.evolutionboost.ticket.TicketManager;
+import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
+import com.ichezzy.evolutionboost.item.TicketManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -9,12 +10,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
-public final class EventTpCommand {
-    private EventTpCommand(){}
+public final class EventCommand {
+    private EventCommand(){}
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         var subtree = Commands.literal("event")
-                .requires(src -> src.hasPermission(2))
+                // Nur OP oder Spieler mit evolutionboost.event
+                .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.event", 2, false))
+
                 .then(Commands.literal("tp")
                         .then(Commands.argument("dimension", DimensionArgument.dimension())
                                 .executes(ctx -> {
@@ -38,7 +41,7 @@ public final class EventTpCommand {
                                         ctx.getSource().sendFailure(Component.literal("[EventTP] Already in a session – use /evolutionboost event return first."));
                                         return 0;
                                     }
-                                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to "+tgt.key()+"."), false);
+                                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to " + tgt.key() + "."), false);
                                     return 1;
                                 })
                         )
@@ -69,7 +72,7 @@ public final class EventTpCommand {
         ServerPlayer p = src.getPlayerOrException();
         var pos = p.blockPosition();
         TicketManager.setSpawn(t, pos);
-        src.sendSuccess(() -> Component.literal("[EventTP] "+t.key()+" spawn set to " + pos.getX()+" "+pos.getY()+" "+pos.getZ()), false);
+        src.sendSuccess(() -> Component.literal("[EventTP] " + t.key() + " spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
         return 1;
     }
 }

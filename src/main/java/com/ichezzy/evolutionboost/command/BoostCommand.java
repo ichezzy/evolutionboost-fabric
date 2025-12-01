@@ -1,6 +1,7 @@
 package com.ichezzy.evolutionboost.command;
 
 import com.ichezzy.evolutionboost.boost.ActiveBoost;
+import com.ichezzy.evolutionboost.boost.BoostColors;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostScope;
 import com.ichezzy.evolutionboost.boost.BoostType;
@@ -8,79 +9,73 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.DimensionArgument;
-import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 
-import java.util.Arrays;
 import java.util.Locale;
-import java.util.UUID;
 
 public final class BoostCommand {
     private BoostCommand() {}
 
     // ---- Suggestions ----
-    private static final SuggestionProvider<CommandSourceStack> SUGGEST_TYPES = (ctx, b) ->
-            SharedSuggestionProvider.suggest(
-                    Arrays.stream(BoostType.values()).map(t -> t.name().toLowerCase(Locale.ROOT)),
-                    b
-            );
 
-    private static final SuggestionProvider<CommandSourceStack> SUGGEST_UNITS = (ctx, b) ->
-            SharedSuggestionProvider.suggest(
-                    Arrays.asList("s", "sec", "m", "min", "h", "hour", "d", "day"),
-                    b
-            );
+    private static final SuggestionProvider<CommandSourceStack> TYPE_SUGGEST =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    java.util.Arrays.stream(BoostType.values()).map(Enum::name).toList(), b);
 
+    private static final SuggestionProvider<CommandSourceStack> UNIT_SUGGEST =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    new String[]{"s","m","h","d"}, b);
+
+    /** Registrieren unter /evolutionboost boost … und /eb boost … */
     public static void register(CommandDispatcher<CommandSourceStack> d) {
+        var subtree = Commands.literal("boost")
+                // falls du LuckPerms-Wrapper nutzen willst, ersetze diese Zeile:
+                .requires(src -> src.hasPermission(2))
 
-        // WICHTIG: OP-Gate direkt am "boost"-Literal,
-        // NICHT an "evolutionboost"/"eb", damit /eb rewards weiter für alle geht.
-        var boostRoot = Commands.literal("boost")
-                .requires(src -> src.hasPermission(2))  // <- nur OP (Permission-Level 2)
-
-                // ==================== /evolutionboost boost add ... ====================
+                // ================== ADD ==================
                 .then(Commands.literal("add")
-
-                        // /evolutionboost boost add global <type> <mult> <value> <unit>
+                        // ---- global ----
                         .then(Commands.literal("global")
-                                .then(Commands.argument("type", StringArgumentType.word()).suggests(SUGGEST_TYPES)
-                                        .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.0))
-                                                .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.001))
-                                                        .then(Commands.argument("unit", StringArgumentType.word()).suggests(SUGGEST_UNITS)
+                                .then(Commands.argument("type", StringArgumentType.word()).suggests(TYPE_SUGGEST)
+                                        .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.1D, 1000D))
+                                                .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.001D, 1_000_000D))
+                                                        .then(Commands.argument("unit", StringArgumentType.word()).suggests(UNIT_SUGGEST)
                                                                 .executes(ctx -> {
                                                                     var src = ctx.getSource();
+                                                                    var server = src.getServer();
                                                                     BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
                                                                     if (type == null) {
-                                                                        src.sendFailure(Component.literal("[Boost] Unknown type."));
+                                                                        src.sendFailure(Component.literal("Unknown boost type."));
                                                                         return 0;
                                                                     }
                                                                     double mult = DoubleArgumentType.getDouble(ctx, "multiplier");
-                                                                    double val = DoubleArgumentType.getDouble(ctx, "value");
+                                                                    double value = DoubleArgumentType.getDouble(ctx, "value");
                                                                     String unit = StringArgumentType.getString(ctx, "unit");
-                                                                    long durMs = DurationParser.fromValueUnit(val, unit);
+                                                                    long durMs = DurationParser.fromValueUnit(value, unit);
 
-                                                                    ActiveBoost ab = new ActiveBoost(
-                                                                            type,
-                                                                            BoostScope.GLOBAL,
-                                                                            Math.max(0.0, mult),
-                                                                            durMs,
-                                                                            null,
-                                                                            null
-                                                                    );
-                                                                    String key = BoostManager.get(src.getServer()).addBoost(src.getServer(), ab);
+                                                                    ActiveBoost ab = new ActiveBoost(type, BoostScope.GLOBAL, mult, durMs);
+                                                                    BoostManager.get(server).addBoost(server, ab);
+
+                                                                    // Admin-Nachricht
                                                                     src.sendSuccess(
-                                                                            () -> Component.literal("[Boost] Added GLOBAL " + type + " x" + mult +
-                                                                                    " for " + DurationParser.pretty(durMs) + " (key=" + key + ")"),
+                                                                            () -> Component.literal("[Boost] Added GLOBAL ")
+                                                                                    .append(Component.literal(type.name())
+                                                                                            .withStyle(BoostColors.chatColor(type), ChatFormatting.BOLD))
+                                                                                    .append(Component.literal(" x" + mult + " for " + DurationParser.pretty(durMs))),
                                                                             false
                                                                     );
+
+                                                                    // Broadcast an alle Spieler
+                                                                    broadcastBoostStartGlobal(server, type, mult, durMs);
+
                                                                     return 1;
                                                                 })
                                                         )
@@ -89,75 +84,34 @@ public final class BoostCommand {
                                 )
                         )
 
-                        // /evolutionboost boost add player <player> <type> <mult> <value> <unit>
-                        .then(Commands.literal("player")
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .then(Commands.argument("type", StringArgumentType.word()).suggests(SUGGEST_TYPES)
-                                                .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.0))
-                                                        .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.001))
-                                                                .then(Commands.argument("unit", StringArgumentType.word()).suggests(SUGGEST_UNITS)
-                                                                        .executes(ctx -> {
-                                                                            var src = ctx.getSource();
-                                                                            ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                                                            BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
-                                                                            if (type == null) {
-                                                                                src.sendFailure(Component.literal("[Boost] Unknown type."));
-                                                                                return 0;
-                                                                            }
-                                                                            double mult = DoubleArgumentType.getDouble(ctx, "multiplier");
-                                                                            double val = DoubleArgumentType.getDouble(ctx, "value");
-                                                                            String unit = StringArgumentType.getString(ctx, "unit");
-                                                                            long durMs = DurationParser.fromValueUnit(val, unit);
-
-                                                                            UUID pid = target.getUUID();
-                                                                            String pname = target.getGameProfile().getName();
-                                                                            ActiveBoost ab = new ActiveBoost(
-                                                                                    type,
-                                                                                    BoostScope.PLAYER,
-                                                                                    Math.max(0.0, mult),
-                                                                                    durMs,
-                                                                                    pid,
-                                                                                    pname
-                                                                            );
-                                                                            String key = BoostManager.get(src.getServer()).addBoost(src.getServer(), ab);
-                                                                            src.sendSuccess(
-                                                                                    () -> Component.literal("[Boost] Added PLAYER " + pname + " " + type +
-                                                                                            " x" + mult + " for " + DurationParser.pretty(durMs) +
-                                                                                            " (key=" + key + ")"),
-                                                                                    false
-                                                                            );
-                                                                            return 1;
-                                                                        })
-                                                                )
-                                                        )
-                                                )
-                                        )
-                                )
-                        )
-
-                        // /evolutionboost boost add dim <dimension> <type> <mult>
+                        // ---- dimension ----
                         .then(Commands.literal("dim")
                                 .then(Commands.argument("dimension", DimensionArgument.dimension())
-                                        .then(Commands.argument("type", StringArgumentType.word()).suggests(SUGGEST_TYPES)
-                                                .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.0))
+                                        .then(Commands.argument("type", StringArgumentType.word()).suggests(TYPE_SUGGEST)
+                                                .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.1D, 1000D))
                                                         .executes(ctx -> {
                                                             var src = ctx.getSource();
-                                                            ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
-                                                            ResourceKey<Level> dimKey = level.dimension();
+                                                            var server = src.getServer();
+                                                            ResourceKey<Level> dim = DimensionArgument.getDimension(ctx, "dimension").dimension();
                                                             BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
                                                             if (type == null) {
-                                                                src.sendFailure(Component.literal("[Boost] Unknown type."));
+                                                                src.sendFailure(Component.literal("Unknown boost type."));
                                                                 return 0;
                                                             }
                                                             double mult = DoubleArgumentType.getDouble(ctx, "multiplier");
+                                                            BoostManager.get(server).setDimensionMultiplier(type, dim, mult);
 
-                                                            BoostManager.get(src.getServer())
-                                                                    .setDimensionMultiplier(type, dimKey, Math.max(0.0, mult));
                                                             src.sendSuccess(
-                                                                    () -> Component.literal("[Boost] Dimension " + dimKey.location() + " " + type +
-                                                                            " multiplier = x" + mult),
+                                                                    () -> Component.literal("[Boost] Set DIM ")
+                                                                            .append(Component.literal(type.name())
+                                                                                    .withStyle(BoostColors.chatColor(type), ChatFormatting.BOLD))
+                                                                            .append(Component.literal(" x" + mult + " in " + dim.location())),
                                                                     false
                                                             );
+
+                                                            // Broadcast an alle Spieler (mit Dimension-Hinweis)
+                                                            broadcastBoostStartDim(server, type, mult, dim);
+
                                                             return 1;
                                                         })
                                                 )
@@ -166,137 +120,146 @@ public final class BoostCommand {
                         )
                 )
 
-                // ==================== /evolutionboost boost clear ... ====================
+                // ================== CLEAR ==================
                 .then(Commands.literal("clear")
+                        // /eb boost clear all
+                        .then(Commands.literal("all").executes(ctx -> {
+                            var src = ctx.getSource();
+                            var server = src.getServer();
+                            int removed = BoostManager.get(server).clearAll();
+                            src.sendSuccess(
+                                    () -> Component.literal("[Boost] Cleared " + removed + " active global boosts."),
+                                    false
+                            );
+                            return removed;
+                        }))
 
-                        // /evolutionboost boost clear global [type]
+                        // /eb boost clear global [type]
                         .then(Commands.literal("global")
                                 .executes(ctx -> {
                                     var src = ctx.getSource();
-                                    int n = BoostManager.get(src.getServer()).clearGlobal(null);
+                                    var server = src.getServer();
+                                    int removed = BoostManager.get(server).clearGlobal(null);
                                     src.sendSuccess(
-                                            () -> Component.literal("[Boost] Cleared " + n + " GLOBAL boosts"),
+                                            () -> Component.literal("[Boost] Cleared " + removed + " GLOBAL boosts."),
                                             false
                                     );
-                                    return 1;
+                                    return removed;
                                 })
-                                .then(Commands.argument("type", StringArgumentType.word()).suggests(SUGGEST_TYPES)
+                                .then(Commands.argument("type", StringArgumentType.word()).suggests(TYPE_SUGGEST)
                                         .executes(ctx -> {
                                             var src = ctx.getSource();
+                                            var server = src.getServer();
                                             BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
                                             if (type == null) {
-                                                src.sendFailure(Component.literal("[Boost] Unknown type."));
+                                                src.sendFailure(Component.literal("Unknown boost type."));
                                                 return 0;
                                             }
-                                            int n = BoostManager.get(src.getServer()).clearGlobal(type);
+                                            int removed = BoostManager.get(server).clearGlobal(type);
                                             src.sendSuccess(
-                                                    () -> Component.literal("[Boost] Cleared " + n + " GLOBAL boosts of " + type),
+                                                    () -> Component.literal("[Boost] Cleared " + removed + " GLOBAL boosts of type " + type.name() + "."),
                                                     false
                                             );
-                                            return 1;
+                                            return removed;
                                         })
                                 )
                         )
 
-                        // /evolutionboost boost clear player <player> [type]
-                        .then(Commands.literal("player")
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .executes(ctx -> {
-                                            var src = ctx.getSource();
-                                            ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                            int n = BoostManager.get(src.getServer()).clearPlayer(target.getUUID(), null);
-                                            src.sendSuccess(
-                                                    () -> Component.literal("[Boost] Cleared " + n + " PLAYER boosts for "
-                                                            + target.getName().getString()),
-                                                    false
-                                            );
-                                            return 1;
-                                        })
-                                        .then(Commands.argument("type", StringArgumentType.word()).suggests(SUGGEST_TYPES)
-                                                .executes(ctx -> {
-                                                    var src = ctx.getSource();
-                                                    ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                                    BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
-                                                    if (type == null) {
-                                                        src.sendFailure(Component.literal("[Boost] Unknown type."));
-                                                        return 0;
-                                                    }
-                                                    int n = BoostManager.get(src.getServer())
-                                                            .clearPlayer(target.getUUID(), type);
-                                                    src.sendSuccess(
-                                                            () -> Component.literal("[Boost] Cleared " + n + " PLAYER boosts of " + type +
-                                                                    " for " + target.getName().getString()),
-                                                            false
-                                                    );
-                                                    return 1;
-                                                })
-                                        )
-                                )
-                        )
-
-                        // /evolutionboost boost clear dim <dimension> [type]
+                        // /eb boost clear dim <dimension> [type]
                         .then(Commands.literal("dim")
                                 .then(Commands.argument("dimension", DimensionArgument.dimension())
                                         .executes(ctx -> {
                                             var src = ctx.getSource();
-                                            ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
-                                            ResourceKey<Level> dimKey = level.dimension();
-                                            BoostManager.get(src.getServer()).clearAllDimensionMultipliers(dimKey);
+                                            var server = src.getServer();
+                                            ResourceKey<Level> dim = DimensionArgument.getDimension(ctx, "dimension").dimension();
+                                            BoostManager.get(server).clearAllDimensionMultipliers(dim);
                                             src.sendSuccess(
-                                                    () -> Component.literal("[Boost] Cleared ALL dimension multipliers for "
-                                                            + dimKey.location()),
+                                                    () -> Component.literal("[Boost] Cleared all DIM multipliers in " + dim.location() + "."),
                                                     false
                                             );
                                             return 1;
                                         })
-                                        .then(Commands.argument("type", StringArgumentType.word()).suggests(SUGGEST_TYPES)
-                                                .executes(ctx -> {
-                                                    var src = ctx.getSource();
-                                                    ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
-                                                    ResourceKey<Level> dimKey = level.dimension();
-                                                    BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
-                                                    if (type == null) {
-                                                        src.sendFailure(Component.literal("[Boost] Unknown type."));
-                                                        return 0;
-                                                    }
-                                                    BoostManager.get(src.getServer()).clearDimensionMultiplier(type, dimKey);
-                                                    src.sendSuccess(
-                                                            () -> Component.literal("[Boost] Cleared " + type +
-                                                                    " multiplier for " + dimKey.location()),
-                                                            false
-                                                    );
-                                                    return 1;
-                                                })
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("type", StringArgumentType.word()).suggests(TYPE_SUGGEST)
+                                                        .executes(ctx -> {
+                                                            var src = ctx.getSource();
+                                                            var server = src.getServer();
+                                                            ResourceKey<Level> dim = DimensionArgument.getDimension(ctx, "dimension").dimension();
+                                                            BoostType type = parseType(StringArgumentType.getString(ctx, "type"));
+                                                            if (type == null) {
+                                                                src.sendFailure(Component.literal("Unknown boost type."));
+                                                                return 0;
+                                                            }
+                                                            BoostManager.get(server).clearDimensionMultiplier(type, dim);
+                                                            src.sendSuccess(
+                                                                    () -> Component.literal("[Boost] Cleared DIM multiplier for " + type.name() +
+                                                                            " in " + dim.location() + "."),
+                                                                    false
+                                                            );
+                                                            return 1;
+                                                        })
+                                                )
                                         )
                                 )
                         )
-
-                        // /evolutionboost boost clear all
-                        .then(Commands.literal("all")
-                                .executes(ctx -> {
-                                    var src = ctx.getSource();
-                                    int n = BoostManager.get(src.getServer()).clearAll();
-                                    src.sendSuccess(
-                                            () -> Component.literal("[Boost] Cleared ALL boosts (" + n + ")"),
-                                            false
-                                    );
-                                    return 1;
-                                })
-                        )
                 );
 
-        // Unter /evolutionboost und /eb anhängen – OHNE requires hier,
-        // damit /evolutionboost rewards … weiterhin allen offen steht.
-        d.register(Commands.literal("evolutionboost").then(boostRoot));
-        d.register(Commands.literal("eb").then(boostRoot));
+        // unter /evolutionboost & /eb anhängen
+        d.register(Commands.literal("evolutionboost").then(subtree));
+        d.register(Commands.literal("eb").then(subtree));
     }
 
-    private static BoostType parseType(String s) {
-        if (s == null) return null;
-        String k = s.trim().toUpperCase(Locale.ROOT);
-        for (BoostType t : BoostType.values()) {
-            if (t.name().equals(k)) return t;
+    private static BoostType parseType(String raw) {
+        if (raw == null) return null;
+        String up = raw.trim().toUpperCase(Locale.ROOT);
+        try {
+            return BoostType.valueOf(up);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
-        return null;
+    }
+
+    // --------- Broadcast-Helfer ---------
+
+    private static void broadcastBoostStartGlobal(net.minecraft.server.MinecraftServer server,
+                                                  BoostType type, double mult, long durMs) {
+        if (server == null) return;
+
+        ChatFormatting typeColor = BoostColors.chatColor(type);
+        String duration = DurationParser.pretty(durMs);
+
+        Component msg = Component.literal("[EVOLUTIONBOOST] ")
+                .withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD)
+                .append(Component.literal("GLOBAL ")
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(type.name())
+                        .withStyle(typeColor, ChatFormatting.BOLD))
+                .append(Component.literal(" x" + mult + " for " + duration)
+                        .withStyle(ChatFormatting.WHITE));
+
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            p.sendSystemMessage(msg);
+        }
+    }
+
+    private static void broadcastBoostStartDim(net.minecraft.server.MinecraftServer server,
+                                               BoostType type, double mult, ResourceKey<Level> dim) {
+        if (server == null) return;
+
+        ChatFormatting typeColor = BoostColors.chatColor(type);
+        String dimName = dim.location().toString();
+
+        Component msg = Component.literal("[EVOLUTIONBOOST] ")
+                .withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD)
+                .append(Component.literal("DIM ")
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(type.name())
+                        .withStyle(typeColor, ChatFormatting.BOLD))
+                .append(Component.literal(" x" + mult + " in " + dimName)
+                        .withStyle(ChatFormatting.WHITE));
+
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            p.sendSystemMessage(msg);
+        }
     }
 }

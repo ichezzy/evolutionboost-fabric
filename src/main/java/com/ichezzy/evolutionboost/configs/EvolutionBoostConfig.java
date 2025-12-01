@@ -37,12 +37,20 @@ public final class EvolutionBoostConfig {
     /** z. B. "halloween" -> Spawn, "safari" -> Spawn, "christmas" -> Spawn */
     public Map<String, Spawn> eventSpawns = new LinkedHashMap<>();
 
-    /** Globale Beispiel-Settings */
+    /** Maximale erlaubte Boost-Multiplikation (z. B. 10.0) */
     public double maxBoostMultiplier = 10.0;
-    public boolean shinyCharmEnabled = false;
-    public int shinyCharmTargetOdds = 2048;
 
-    /** NEU: Christmas-Event Settings */
+    /**
+     * Basischance für Shiny-Rolls (1 in shinyBaseOdds).
+     * Sollte zur Cobblemon-Config passen (z.B. 8192).
+     */
+    public int shinyBaseOdds = 8192;
+
+    /** Shiny Charm Ziel-Odds (1 in shinyCharmTargetOdds), z.B. halb so selten wie Basis (4096). */
+    public boolean shinyCharmEnabled = false;
+    public int shinyCharmTargetOdds = 4096;
+
+    /** Christmas-Event Settings (derzeit ggf. ungenutzt, aber belassen für Kompatibilität). */
     public boolean christmasDebug = false;
     /** Ein Blizzard pro ... Minuten (z. B. 60) */
     public int christmasStormEveryMinutes = 60;
@@ -97,6 +105,18 @@ public final class EvolutionBoostConfig {
         } catch (Exception e) {
             INSTANCE = defaults();
         }
+
+        // Fallbacks für alte Configs ohne neue Felder
+        if (INSTANCE.shinyBaseOdds <= 0) {
+            INSTANCE.shinyBaseOdds = 8192;
+        }
+        if (INSTANCE.maxBoostMultiplier <= 0) {
+            INSTANCE.maxBoostMultiplier = 10.0;
+        }
+        if (INSTANCE.shinyCharmTargetOdds <= 0) {
+            INSTANCE.shinyCharmTargetOdds = 4096;
+        }
+
         return INSTANCE;
     }
 
@@ -115,10 +135,11 @@ public final class EvolutionBoostConfig {
     private static EvolutionBoostConfig defaults() {
         EvolutionBoostConfig c = new EvolutionBoostConfig();
         c.maxBoostMultiplier = 10.0;
+        c.shinyBaseOdds = 8192;
         c.shinyCharmEnabled = false;
-        c.shinyCharmTargetOdds = 2048;
+        c.shinyCharmTargetOdds = 4096;
 
-        // Christmas defaults
+        // Christmas defaults (ggf. später komplett entfernen, wenn Code bereinigt ist)
         c.christmasDebug = false;
         c.christmasStormEveryMinutes = 60;
         c.christmasStormDurationMinutes = 6;
