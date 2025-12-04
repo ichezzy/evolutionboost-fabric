@@ -37,6 +37,18 @@ public final class EvolutionBoostConfig {
     /** z. B. "halloween" -> Spawn, "safari" -> Spawn, "christmas" -> Spawn */
     public Map<String, Spawn> eventSpawns = new LinkedHashMap<>();
 
+    /**
+     * Permanente Dimension-Boosts:
+     *
+     *  "dimensionBoosts": {
+     *    "minecraft:overworld": { "SHINY": 1.5, "XP": 2.0 },
+     *    "event:safari":       { "XP": 3.0 }
+     *  }
+     *
+     * Wird beim Serverstart in BoostManager übernommen.
+     */
+    public Map<String, Map<String, Double>> dimensionBoosts = new LinkedHashMap<>();
+
     /** Maximale erlaubte Boost-Multiplikation (z. B. 10.0) */
     public double maxBoostMultiplier = 10.0;
 
@@ -116,6 +128,9 @@ public final class EvolutionBoostConfig {
         if (INSTANCE.shinyCharmTargetOdds <= 0) {
             INSTANCE.shinyCharmTargetOdds = 4096;
         }
+        if (INSTANCE.dimensionBoosts == null) {
+            INSTANCE.dimensionBoosts = new LinkedHashMap<>();
+        }
 
         return INSTANCE;
     }
@@ -138,6 +153,8 @@ public final class EvolutionBoostConfig {
         c.shinyBaseOdds = 8192;
         c.shinyCharmEnabled = false;
         c.shinyCharmTargetOdds = 4096;
+
+        c.dimensionBoosts = new LinkedHashMap<>();
 
         // Christmas defaults (ggf. später komplett entfernen, wenn Code bereinigt ist)
         c.christmasDebug = false;

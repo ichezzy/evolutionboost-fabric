@@ -6,6 +6,7 @@ import com.ichezzy.evolutionboost.command.EventCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.configs.CommandLogConfig;
+import com.ichezzy.evolutionboost.hud.BoostHudSync;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
@@ -35,6 +36,9 @@ public class EvolutionBoost implements ModInitializer {
 
         ModItems.registerAll();
         ModItemGroup.register();
+
+        // Dim-HUD Sync (nur Dimension-Multiplikatoren)
+        BoostHudSync.init();
 
         // ---- Commands zentral registrieren (übersteht /reload) ----
         CommandRegistrationCallback.EVENT.register(

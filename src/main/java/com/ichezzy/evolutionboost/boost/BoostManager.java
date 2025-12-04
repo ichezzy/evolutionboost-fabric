@@ -1,13 +1,16 @@
 package com.ichezzy.evolutionboost.boost;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,7 +24,7 @@ import java.util.stream.Collectors;
 
 /**
  * Hält aktive Boosts (nur noch GLOBAL) und persistiert sie.
- * PLUS: nicht-persistente Dimension-Multiplikatoren (zur Laufzeit per Commands/Events).
+ * PLUS: Dimension-Multiplikatoren pro BoostType (werden über EvolutionBoostConfig gespeichert).
  */
 public class BoostManager extends SavedData {
     private static final String SAVE_KEY = EvolutionBoost.MOD_ID + "_boosts";
@@ -29,9 +32,12 @@ public class BoostManager extends SavedData {
     private final Map<String, ActiveBoost> active = new ConcurrentHashMap<>();
     private final Map<String, ServerBossEvent> bossbars = new HashMap<>();
 
-    /** Dimensionale Multiplikatoren pro BoostType (nicht persistent). */
+    /** Dimensionale Multiplikatoren pro BoostType. */
     private final EnumMap<BoostType, Map<ResourceKey<Level>, Double>> dimensionMults =
             new EnumMap<>(BoostType.class);
+
+    /** Einmaliger Flag, damit wir Config-Daten nicht jedes Mal neu einlesen. */
+    private boolean dimLoadedFromConfig = false;
 
     /** 1.21.1-Weg: Factory + computeIfAbsent(factory, key). */
     public static BoostManager get(MinecraftServer server) {
@@ -43,7 +49,12 @@ public class BoostManager extends SavedData {
                 BoostManager::load,
                 null
         );
-        return storage.computeIfAbsent(factory, SAVE_KEY);
+        BoostManager manager = storage.computeIfAbsent(factory, SAVE_KEY);
+        if (!manager.dimLoadedFromConfig) {
+            manager.reloadDimensionMultipliersFromConfig();
+            manager.dimLoadedFromConfig = true;
+        }
+        return manager;
     }
 
     public BoostManager() {
@@ -52,7 +63,7 @@ public class BoostManager extends SavedData {
         }
     }
 
-    // ---------- Persistence ----------
+    // ---------- Persistence (GLOBAL-Boosts) ----------
 
     public static BoostManager load(CompoundTag tag, HolderLookup.Provider lookup) {
         BoostManager m = new BoostManager();
@@ -91,7 +102,7 @@ public class BoostManager extends SavedData {
         return tag;
     }
 
-    // ---------- API: hinzufügen/entfernen ----------
+    // ---------- API: hinzufügen/entfernen (GLOBAL) ----------
 
     public String addBoost(MinecraftServer server, ActiveBoost ab) {
         String key = makeKey(ab);
@@ -123,26 +134,106 @@ public class BoostManager extends SavedData {
         setDirty();
     }
 
-    // ---------- Dimension-API ----------
+    // ---------- Dimension-API (persistent über EvolutionBoostConfig) ----------
 
+    /**
+     * Setzt den Multiplikator für (Type, Dimension) und schreibt ihn in EvolutionBoostConfig.dimensionBoosts.
+     * multiplier <= 1.0 wird als "kein spezieller Boost" behandelt und aus der Config entfernt.
+     */
     public void setDimensionMultiplier(BoostType type, ResourceKey<Level> dim, double multiplier) {
         if (dim == null) return;
-        dimensionMults.get(type).put(dim, Math.max(0.0, multiplier));
+        double clamped = Math.max(0.0, multiplier);
+        dimensionMults.get(type).put(dim, clamped);
+
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        String dimKey = dim.location().toString();
+        Map<String, Double> byType = cfg.dimensionBoosts
+                .computeIfAbsent(dimKey, k -> new LinkedHashMap<>());
+
+        if (clamped <= 1.0) {
+            byType.remove(type.name());
+            if (byType.isEmpty()) {
+                cfg.dimensionBoosts.remove(dimKey);
+            }
+        } else {
+            byType.put(type.name(), clamped);
+        }
+        EvolutionBoostConfig.save();
     }
 
     public void clearDimensionMultiplier(BoostType type, ResourceKey<Level> dim) {
         if (dim == null) return;
         dimensionMults.get(type).remove(dim);
+
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        String dimKey = dim.location().toString();
+        Map<String, Double> byType = cfg.dimensionBoosts.get(dimKey);
+        if (byType != null) {
+            byType.remove(type.name());
+            if (byType.isEmpty()) {
+                cfg.dimensionBoosts.remove(dimKey);
+            }
+            EvolutionBoostConfig.save();
+        }
     }
 
     public void clearAllDimensionMultipliers(ResourceKey<Level> dim) {
         if (dim == null) return;
-        for (BoostType t : BoostType.values()) dimensionMults.get(t).remove(dim);
+        for (BoostType t : BoostType.values()) {
+            dimensionMults.get(t).remove(dim);
+        }
+
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        cfg.dimensionBoosts.remove(dim.location().toString());
+        EvolutionBoostConfig.save();
     }
 
     public double getDimensionMultiplier(BoostType type, ResourceKey<Level> dim) {
         if (dim == null) return 1.0;
         return dimensionMults.get(type).getOrDefault(dim, 1.0);
+    }
+
+    /**
+     * Lädt alle Dimension-Boosts aus EvolutionBoostConfig.dimensionBoosts in die internen Maps.
+     * Wird genau einmal bei get(server) aufgerufen.
+     */
+    public void reloadDimensionMultipliersFromConfig() {
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+
+        for (BoostType t : BoostType.values()) {
+            dimensionMults.get(t).clear();
+        }
+
+        if (cfg.dimensionBoosts == null || cfg.dimensionBoosts.isEmpty()) {
+            return;
+        }
+
+        for (var dimEntry : cfg.dimensionBoosts.entrySet()) {
+            String dimKey = dimEntry.getKey();
+            ResourceLocation rl;
+            try {
+                rl = ResourceLocation.parse(dimKey);
+            } catch (Exception e) {
+                EvolutionBoost.LOGGER.warn("[Boost] Invalid dimension key in config: {}", dimKey);
+                continue;
+            }
+            ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, rl);
+            Map<String, Double> byType = dimEntry.getValue();
+            if (byType == null) continue;
+
+            for (var typeEntry : byType.entrySet()) {
+                BoostType type;
+                try {
+                    type = BoostType.valueOf(typeEntry.getKey());
+                } catch (IllegalArgumentException ex) {
+                    EvolutionBoost.LOGGER.warn("[Boost] Invalid boost type for dimension {}: {}", dimKey, typeEntry.getKey());
+                    continue;
+                }
+                Double val = typeEntry.getValue();
+                if (val == null || val <= 0.0) continue;
+                dimensionMults.get(type).put(dim, val);
+            }
+        }
     }
 
     /** Kompat-Overload – player wird ignoriert. */
@@ -229,7 +320,7 @@ public class BoostManager extends SavedData {
         }
     }
 
-    /** Neuer, hübscher Titel für die Bossbar. */
+    /** Hübscher Titel für die Bossbar (GLOBAL-Boosts). */
     private Component titleFor(ActiveBoost ab, long leftMs) {
         String timer = formatDuration(leftMs);
         String txt = "[EVOLUTIONBOOST] GLOBAL " + ab.type + " x" + ab.multiplier + " " + timer;
