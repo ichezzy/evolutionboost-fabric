@@ -108,6 +108,139 @@ public final class ModItems {
                     "tooltip.evolutionboost.halloween25_gold")
     );
 
+    // CHRISTMAS ITEMS
+    public static final Item CANDY_CANE = register(
+            "candy_cane",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.candy_cane")
+    );
+
+    public static final Item CHRISTMAS_BALL_BLUE = register(
+            "christmas_ball_blue",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.christmas_ball_blue")
+    );
+
+    public static final Item CHRISTMAS_BALL_GREEN = register(
+            "christmas_ball_green",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.christmas_ball_green")
+    );
+
+    public static final Item CHRISTMAS_BALL_RED = register(
+            "christmas_ball_red",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.christmas_ball_red")
+    );
+
+    public static final Item CHRISTMAS_HAT = register(
+            "christmas_hat",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.christmas_hat")
+    );
+
+    public static final Item CHRISTMAS_LOOT_SACK = register(
+            "christmas_loot_sack",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.christmas_loot_sack")
+    );
+
+    public static final Item CURSED_COAL = register(
+            "cursed_coal",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.cursed_coal")
+    );
+
+    public static final Item CURSED_COAL_HEART = register(
+            "cursed_coal_heart",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.cursed_coal_heart")
+    );
+
+    public static final Item CURSED_GIFT_BLACK = register(
+            "cursed_gift_black",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.cursed_gift_black")
+    );
+
+    public static final Item CURSED_GIFT_PURPLE = register(
+            "cursed_gift_purple",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.cursed_gift_purple")
+    );
+
+    public static final Item GIFT_BLUE = register(
+            "gift_blue",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.gift_blue")
+    );
+
+    public static final Item GIFT_GREEN = register(
+            "gift_green",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.gift_green")
+    );
+
+    public static final Item GIFT_RED = register(
+            "gift_red",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.gift_red")
+    );
+
+    public static final Item GINGERBREAD = register(
+            "gingerbread",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.gingerbread")
+    );
+
+    public static final Item HOLY_SPARK = register(
+            "holy_spark",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.holy_spark")
+    );
+
+    public static final Item ICE_CROWN = register(
+            "ice_crown",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.ice_crown")
+    );
+
+    public static final Item ICE_HEART = register(
+            "ice_heart",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.ice_heart")
+    );
+
+    public static final Item ICE_QUEEN_RAID_KEY = register(
+            "ice_queen_raid_key",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.ice_queen_raid_key")
+    );
+
+    public static final Item KRAMPUS_RAID_KEY = register(
+            "krampus_raid_key",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.krampus_raid_key")
+    );
+
+    public static final Item LOST_TOY = register(
+            "lost_toy",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.lost_toy")
+    );
+
+    public static final Item SPIRIT_DEW = register(
+            "spirit_dew",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.spirit_dew")
+    );
+
+    public static final Item SPIRIT_DEW_SHARDS = register(
+            "spirit_dew_shards",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.spirit_dew_shards")
+    );
+
     // ---- Safari / Voucher (Platzhalter) ----
     public static final Item SHINY_CHARM = register(
             "shiny_charm",

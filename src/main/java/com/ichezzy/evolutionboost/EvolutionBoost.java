@@ -4,16 +4,17 @@ import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.BoostCommand;
 import com.ichezzy.evolutionboost.command.EventCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
+import com.ichezzy.evolutionboost.command.WeatherCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.configs.CommandLogConfig;
 import com.ichezzy.evolutionboost.hud.BoostHudSync;
 import com.ichezzy.evolutionboost.hud.DimBoostHudPayload;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
+import com.ichezzy.evolutionboost.item.TicketManager;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.reward.RewardManager;
-import com.ichezzy.evolutionboost.item.TicketManager;
-
+import com.ichezzy.evolutionboost.weather.EventWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -48,6 +49,9 @@ public class EvolutionBoost implements ModInitializer {
         // ---- Dim-HUD Sync (nur Dimension-Multiplikatoren) ----
         BoostHudSync.init();
 
+        // ---- Event-Wetter (Christmas-Storm etc.) ----
+        EventWeatherManager.init();
+
         // ---- Commands zentral registrieren (übersteht /reload) ----
         CommandRegistrationCallback.EVENT.register(
                 (CommandDispatcher<CommandSourceStack> d,
@@ -58,6 +62,7 @@ public class EvolutionBoost implements ModInitializer {
                     RewardCommand.register(d);
                     BoostCommand.register(d);
                     EventCommand.register(d);
+                    WeatherCommand.register(d);
                 }
         );
 

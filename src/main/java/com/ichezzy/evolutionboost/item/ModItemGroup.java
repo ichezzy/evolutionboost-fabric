@@ -41,6 +41,30 @@ public final class ModItemGroup {
                             output.accept(ModItems.HALLOWEEN25_SILVER);
                             output.accept(ModItems.HALLOWEEN25_GOLD);
 
+                            // Christmas
+                            output.accept(ModItems.CANDY_CANE);
+                            output.accept(ModItems.CHRISTMAS_BALL_BLUE);
+                            output.accept(ModItems.CHRISTMAS_BALL_GREEN);
+                            output.accept(ModItems.CHRISTMAS_BALL_RED);
+                            output.accept(ModItems.CHRISTMAS_HAT);
+                            output.accept(ModItems.CHRISTMAS_LOOT_SACK);
+                            output.accept(ModItems.CURSED_COAL);
+                            output.accept(ModItems.CURSED_COAL_HEART);
+                            output.accept(ModItems.CURSED_GIFT_BLACK);
+                            output.accept(ModItems.CURSED_GIFT_PURPLE);
+                            output.accept(ModItems.GIFT_BLUE);
+                            output.accept(ModItems.GIFT_GREEN);
+                            output.accept(ModItems.GIFT_RED);
+                            output.accept(ModItems.GINGERBREAD);
+                            output.accept(ModItems.HOLY_SPARK);
+                            output.accept(ModItems.ICE_CROWN);
+                            output.accept(ModItems.ICE_HEART);
+                            output.accept(ModItems.ICE_QUEEN_RAID_KEY);
+                            output.accept(ModItems.KRAMPUS_RAID_KEY);
+                            output.accept(ModItems.LOST_TOY);
+                            output.accept(ModItems.SPIRIT_DEW);
+                            output.accept(ModItems.SPIRIT_DEW_SHARDS);
+
                             // Tickets & Voucher
                             output.accept(ModItems.SAFARI_TICKET);
                             output.accept(ModItems.SHINY_CHARM);
