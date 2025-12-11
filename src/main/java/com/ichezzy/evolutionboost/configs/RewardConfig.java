@@ -14,7 +14,7 @@ import java.util.*;
  *
  * Pfad: /config/evolutionboost/rewards/rewards.json
  *
- * Struktur:
+ * Struktur (Beispiel):
  * {
  *   "rewards": {
  *     "DAILY": [
@@ -24,8 +24,25 @@ import java.util.*;
  *     "WEEKLY": [
  *       { "id": "evolutionboost:evolution_coin_silver", "count": 2 }
  *     ],
- *     "MONTHLY_DONATOR": [
- *       { "id": "evolutionboost:evolution_coin_gold", "count": 1 }
+ *     "MONTHLY_DONATOR_COPPER": [
+ *       { "id": "evolutionboost:evolution_coin_silver", "count": 10 },
+ *       { "id": "wanteditems:gold_candy_lucky_box", "count": 10 },
+ *       { "id": "wanteditems:cobblemon_lucky_box", "count": 10 },
+ *       { "id": "wanteditems:ancient_poke_ball_lucky_box", "count": 10 }
+ *     ],
+ *     "MONTHLY_DONATOR_SILVER": [
+ *       { "id": "evolutionboost:evolution_coin_silver", "count": 15 },
+ *       { "id": "wanteditems:gold_candy_lucky_box", "count": 10 },
+ *       { "id": "wanteditems:cobblemon_lucky_box", "count": 10 },
+ *       { "id": "wanteditems:ancient_poke_ball_lucky_box", "count": 10 },
+ *       { "id": "evolutionboost:event_voucher_blank", "count": 1 }
+ *     ],
+ *     "MONTHLY_DONATOR_GOLD": [
+ *       { "id": "evolutionboost:evolution_coin_gold", "count": 1 },
+ *       { "id": "wanteditems:gold_candy_lucky_box", "count": 10 },
+ *       { "id": "wanteditems:cobblemon_lucky_box", "count": 10 },
+ *       { "id": "wanteditems:ancient_poke_ball_lucky_box", "count": 10 },
+ *       { "id": "evolutionboost:event_voucher_blank", "count": 1 }
  *     ],
  *     "MONTHLY_GYM": [
  *       { "id": "evolutionboost:evolution_coin_gold", "count": 1 }
@@ -151,18 +168,48 @@ public final class RewardConfig {
                 new RewardItem("evolutionboost:evolution_coin_bronze", 5)
         ));
 
-        // WEEKLY: 2x Silber-Münze
+        // WEEKLY: 1x Silber-Münze
         c.rewards.put("WEEKLY", List.of(
                 new RewardItem("evolutionboost:evolution_coin_silver", 1)
         ));
 
-        // MONTHLY_DONATOR
-        c.rewards.put("MONTHLY_DONATOR", List.of(
+        // MONTHLY_DONATOR_COPPER:
+        // 10x Evolution Silver Coin
+        // 10x Loot Boxes of each XP, Cobblemon Items and Pokéballs
+        c.rewards.put("MONTHLY_DONATOR_COPPER", List.of(
+                new RewardItem("evolutionboost:evolution_coin_silver", 10),
+                new RewardItem("wanteditems:gold_candy_lucky_box", 10),        // XP
+                new RewardItem("wanteditems:cobblemon_lucky_box", 10),         // Cobblemon Items
+                new RewardItem("wanteditems:ancient_poke_ball_lucky_box", 10)  // Pokéballs
+        ));
+
+        // MONTHLY_DONATOR_SILVER:
+        // 15x Evolution Silver Coin
+        // 10x Loot Boxes of each XP, Cobblemon Items and Pokéballs
+        // 1x Event Voucher (blank)
+        c.rewards.put("MONTHLY_DONATOR_SILVER", List.of(
+                new RewardItem("evolutionboost:evolution_coin_silver", 15),
+                new RewardItem("wanteditems:gold_candy_lucky_box", 10),
+                new RewardItem("wanteditems:cobblemon_lucky_box", 10),
+                new RewardItem("wanteditems:ancient_poke_ball_lucky_box", 10),
+                new RewardItem("evolutionboost:event_voucher_blank", 1)
+        ));
+
+        // MONTHLY_DONATOR_GOLD:
+        // 1x Evolution Gold Coin
+        // 10x Loot Boxes of each XP, Cobblemon Items and Pokéballs
+        // 1x Event Voucher (blank)
+        c.rewards.put("MONTHLY_DONATOR_GOLD", List.of(
                 new RewardItem("evolutionboost:evolution_coin_gold", 1),
-                new RewardItem("evolutionboost:event_voucher_blank", 1),
-                new RewardItem("wanteditems:cobblemon_lucky_box", 5),
-                new RewardItem("wanteditems:gold_candy_lucky_box", 5),
-                new RewardItem("wanteditems:ancient_poke_ball_lucky_box", 5)
+                new RewardItem("wanteditems:gold_candy_lucky_box", 10),
+                new RewardItem("wanteditems:cobblemon_lucky_box", 10),
+                new RewardItem("wanteditems:ancient_poke_ball_lucky_box", 10),
+                new RewardItem("evolutionboost:event_voucher_blank", 1)
+        ));
+
+        // Fallback für alte Configs (wird von RewardManager nur genutzt, wenn jemand explizit "MONTHLY_DONATOR" referenziert)
+        c.rewards.put("MONTHLY_DONATOR", List.of(
+                new RewardItem("evolutionboost:evolution_coin_gold", 1)
         ));
 
         // MONTHLY_GYM

@@ -35,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Rewards mit serverseitiger Realzeit (CET/CEST) + weltgebundener, menschenlesbarer Persistenz.
  *
  * - Eligibility (Properties): /config/evolutionboost/rewards/eligibility.properties
- *   -> wer ist DONATOR / GYM / STAFF (RewardCommand nutzt das)
+ *   -> wer ist DONATOR (Copper/Silver/Gold) / GYM / STAFF (RewardCommand nutzt das)
  *
  * - State (JSON):            <world>/evolutionboost/rewards_state.json
  *   -> wann hat welcher Spieler was zuletzt geclaimt
@@ -54,9 +54,14 @@ public final class RewardManager {
 
     private static final Map<UUID, PlayerRewardState> STATE = new ConcurrentHashMap<>();
     private static final Map<UUID, String> LAST_NAMES = new ConcurrentHashMap<>();
-    private static final Set<String> ALLOWED_DONATOR = Collections.synchronizedSet(new HashSet<>());
-    private static final Set<String> ALLOWED_GYM     = Collections.synchronizedSet(new HashSet<>());
-    private static final Set<String> ALLOWED_STAFF   = Collections.synchronizedSet(new HashSet<>()); // NEU
+
+    // Donator-Tiers (Case-insensitive Namen)
+    private static final Set<String> ALLOWED_DONATOR_COPPER = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_DONATOR_SILVER = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_DONATOR_GOLD   = Collections.synchronizedSet(new HashSet<>());
+
+    private static final Set<String> ALLOWED_GYM   = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_STAFF = Collections.synchronizedSet(new HashSet<>());
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -118,6 +123,11 @@ public final class RewardManager {
         // RewardConfig wird nur über RewardConfig.save() geschrieben, falls du später etwas änderst.
     }
 
+    /** Explizites Reload z.B. über /eb rewards reload. */
+    public static void reloadEligibilityFromDisk() {
+        loadEligibility();
+    }
+
     /* ================== Public API ================== */
 
     /** Login-Hinweise. */
@@ -151,11 +161,18 @@ public final class RewardManager {
 
     /** Schöne Info-Ausgabe je Zeile/Farbe. */
     public static void sendInfo(CommandSourceStack src, ServerPlayer p) {
-        sendOneInfo(src, p, RewardType.DAILY,  ChatFormatting.YELLOW,      "Daily");
-        sendOneInfo(src, p, RewardType.WEEKLY, ChatFormatting.AQUA,        "Weekly");
+        sendOneInfo(src, p, RewardType.DAILY,  ChatFormatting.YELLOW, "Daily");
+        sendOneInfo(src, p, RewardType.WEEKLY, ChatFormatting.AQUA,   "Weekly");
 
         if (isEligibleMonthly(p, RewardType.MONTHLY_DONATOR)) {
-            sendOneInfo(src, p, RewardType.MONTHLY_DONATOR, ChatFormatting.LIGHT_PURPLE, "Monthly (Donator)");
+            DonatorTier tier = getDonatorTier(p);
+            String label = switch (tier) {
+                case COPPER -> "Monthly (Donator Copper)";
+                case SILVER -> "Monthly (Donator Silver)";
+                case GOLD   -> "Monthly (Donator Gold)";
+                default     -> "Monthly (Donator)";
+            };
+            sendOneInfo(src, p, RewardType.MONTHLY_DONATOR, ChatFormatting.LIGHT_PURPLE, label);
         } else {
             src.sendSuccess(() -> Component.literal("Monthly (Donator): not eligible").withStyle(ChatFormatting.RED), false);
         }
@@ -221,15 +238,29 @@ public final class RewardManager {
      * und gibt sie dem Spieler.
      *
      * Mapping:
-     *   DAILY            -> key "DAILY"
-     *   WEEKLY           -> key "WEEKLY"
-     *   MONTHLY_DONATOR  -> key "MONTHLY_DONATOR"
-     *   MONTHLY_GYM      -> key "MONTHLY_GYM"
-     *   MONTHLY_STAFF    -> key "MONTHLY_STAFF"
+     *   DAILY                    -> key "DAILY"
+     *   WEEKLY                   -> key "WEEKLY"
+     *   MONTHLY_DONATOR (Copper) -> key "MONTHLY_DONATOR_COPPER"
+     *   MONTHLY_DONATOR (Silver) -> key "MONTHLY_DONATOR_SILVER"
+     *   MONTHLY_DONATOR (Gold)   -> key "MONTHLY_DONATOR_GOLD"
+     *   MONTHLY_GYM              -> key "MONTHLY_GYM"
+     *   MONTHLY_STAFF            -> key "MONTHLY_STAFF"
      */
     private static void grantConfiguredRewards(ServerPlayer p, RewardType type) {
         RewardConfig cfg = RewardConfig.get();
-        String key = type.name(); // direkt den Enum-Namen verwenden
+
+        String key;
+        if (type == RewardType.MONTHLY_DONATOR) {
+            DonatorTier tier = getDonatorTier(p);
+            key = switch (tier) {
+                case COPPER -> "MONTHLY_DONATOR_COPPER";
+                case SILVER -> "MONTHLY_DONATOR_SILVER";
+                case GOLD   -> "MONTHLY_DONATOR_GOLD";
+                default     -> "MONTHLY_DONATOR"; // Fallback für alte Configs
+            };
+        } else {
+            key = type.name(); // z.B. DAILY, WEEKLY, MONTHLY_GYM, MONTHLY_STAFF
+        }
 
         List<RewardItem> items = cfg.rewards.get(key);
         if (items == null || items.isEmpty()) {
@@ -287,13 +318,9 @@ public final class RewardManager {
         setGymEligibility(playerName, gym);
     }
 
+    /** Backwards-Compat: true = COPPER, false = NONE. */
     public static void setDonatorEligibility(String playerName, boolean donator) {
-        String key = normalizeName(playerName);
-        synchronized (ALLOWED_DONATOR) {
-            if (donator) ALLOWED_DONATOR.add(key);
-            else ALLOWED_DONATOR.remove(key);
-        }
-        saveEligibility();
+        setDonatorTier(playerName, donator ? DonatorTier.COPPER : DonatorTier.NONE);
     }
 
     public static void setGymEligibility(String playerName, boolean gym) {
@@ -317,7 +344,7 @@ public final class RewardManager {
 
     private static boolean isEligibleMonthly(ServerPlayer p, RewardType t) {
         String key = normalizeName(p.getGameProfile().getName());
-        if (t == RewardType.MONTHLY_DONATOR) return ALLOWED_DONATOR.contains(key);
+        if (t == RewardType.MONTHLY_DONATOR) return getDonatorTier(p) != DonatorTier.NONE;
         if (t == RewardType.MONTHLY_GYM)     return ALLOWED_GYM.contains(key);
         if (t == RewardType.MONTHLY_STAFF)   return ALLOWED_STAFF.contains(key);
         return true;
@@ -455,18 +482,41 @@ public final class RewardManager {
     /* ================== Persistenz: Eligibility (Properties) ================== */
 
     private static void loadEligibility() {
-        ALLOWED_DONATOR.clear();
+        ALLOWED_DONATOR_COPPER.clear();
+        ALLOWED_DONATOR_SILVER.clear();
+        ALLOWED_DONATOR_GOLD.clear();
         ALLOWED_GYM.clear();
         ALLOWED_STAFF.clear();
+
         Path p = eligibilityFile();
         if (!Files.exists(p)) { saveEligibility(); return; }
+
         try (var r = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
             Properties props = new Properties();
             props.load(r);
-            for (String n : props.getProperty("donator", "").split(",")) {
+
+            // Neue Tiers
+            for (String n : props.getProperty("donator_copper", "").split(",")) {
                 String k = normalizeName(n);
-                if (!k.isEmpty()) ALLOWED_DONATOR.add(k);
+                if (!k.isEmpty()) ALLOWED_DONATOR_COPPER.add(k);
             }
+            for (String n : props.getProperty("donator_silver", "").split(",")) {
+                String k = normalizeName(n);
+                if (!k.isEmpty()) ALLOWED_DONATOR_SILVER.add(k);
+            }
+            for (String n : props.getProperty("donator_gold", "").split(",")) {
+                String k = normalizeName(n);
+                if (!k.isEmpty()) ALLOWED_DONATOR_GOLD.add(k);
+            }
+
+            // Backwards-Compat: altes "donator" → COPPER, wenn keine Tiers gesetzt sind
+            if (ALLOWED_DONATOR_COPPER.isEmpty() && ALLOWED_DONATOR_SILVER.isEmpty() && ALLOWED_DONATOR_GOLD.isEmpty()) {
+                for (String n : props.getProperty("donator", "").split(",")) {
+                    String k = normalizeName(n);
+                    if (!k.isEmpty()) ALLOWED_DONATOR_COPPER.add(k);
+                }
+            }
+
             for (String n : props.getProperty("gym", "").split(",")) {
                 String k = normalizeName(n);
                 if (!k.isEmpty()) ALLOWED_GYM.add(k);
@@ -484,12 +534,22 @@ public final class RewardManager {
         try {
             Files.createDirectories(rewardsConfigDir());
             Properties props = new Properties();
-            props.setProperty("donator", String.join(",", ALLOWED_DONATOR));
-            props.setProperty("gym", String.join(",", ALLOWED_GYM));
+
+            props.setProperty("donator_copper", String.join(",", ALLOWED_DONATOR_COPPER));
+            props.setProperty("donator_silver", String.join(",", ALLOWED_DONATOR_SILVER));
+            props.setProperty("donator_gold",   String.join(",", ALLOWED_DONATOR_GOLD));
+            props.setProperty("gym",   String.join(",", ALLOWED_GYM));
             props.setProperty("staff", String.join(",", ALLOWED_STAFF));
+
             try (var w = Files.newBufferedWriter(eligibilityFile(), StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                props.store(w, "Rewards eligibility (names, case-insensitive)  |  Syntax:  donator=a,b   gym=c,d   staff=e,f");
+                props.store(w,
+                        "Rewards eligibility (names, case-insensitive)\n" +
+                                "donator_copper=a,b,c\n" +
+                                "donator_silver=x,y\n" +
+                                "donator_gold=z\n" +
+                                "gym=g1,g2\n" +
+                                "staff=s1,s2");
             }
         } catch (IOException e) {
             EvolutionBoost.LOGGER.warn("[rewards] failed to save eligibility: {}", e.getMessage());
@@ -612,11 +672,23 @@ public final class RewardManager {
         catch (Exception ex) { return null; }
     }
 
-    // Liste der Rollen im Chat ausgeben: /rewards list <donator|gym|staff>
+    // Liste der Rollen im Chat ausgeben: /rewards list <donator|donator_copper|donator_silver|donator_gold|gym|staff>
     public static void sendRoleList(CommandSourceStack src, String roleKey) {
         final Set<String> names;
+
         if ("donator".equalsIgnoreCase(roleKey)) {
-            names = ALLOWED_DONATOR;
+            // Alle Donator-Spieler (alle Tiers zusammen)
+            Set<String> all = new LinkedHashSet<>();
+            all.addAll(ALLOWED_DONATOR_COPPER);
+            all.addAll(ALLOWED_DONATOR_SILVER);
+            all.addAll(ALLOWED_DONATOR_GOLD);
+            names = all;
+        } else if ("donator_copper".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_DONATOR_COPPER;
+        } else if ("donator_silver".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_DONATOR_SILVER;
+        } else if ("donator_gold".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_DONATOR_GOLD;
         } else if ("gym".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_GYM;
         } else if ("staff".equalsIgnoreCase(roleKey)) {
@@ -638,7 +710,55 @@ public final class RewardManager {
                 .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
     }
 
-    /* ================== Interner State ================== */
+    /* ================== Interner State & Donator-Tier ================== */
+
+    public enum DonatorTier {
+        NONE,
+        COPPER,
+        SILVER,
+        GOLD
+    }
+
+    public static DonatorTier getDonatorTier(ServerPlayer p) {
+        String key = normalizeName(p.getGameProfile().getName());
+        synchronized (ALLOWED_DONATOR_GOLD) {
+            if (ALLOWED_DONATOR_GOLD.contains(key)) return DonatorTier.GOLD;
+        }
+        synchronized (ALLOWED_DONATOR_SILVER) {
+            if (ALLOWED_DONATOR_SILVER.contains(key)) return DonatorTier.SILVER;
+        }
+        synchronized (ALLOWED_DONATOR_COPPER) {
+            if (ALLOWED_DONATOR_COPPER.contains(key)) return DonatorTier.COPPER;
+        }
+        return DonatorTier.NONE;
+    }
+
+    /**
+     * Setzt die Donator-Stufe und sorgt dafür, dass ein Spieler
+     * nie gleichzeitig in mehreren Stufen ist.
+     */
+    public static void setDonatorTier(String playerName, DonatorTier tier) {
+        String key = normalizeName(playerName);
+
+        synchronized (ALLOWED_DONATOR_COPPER) {
+            ALLOWED_DONATOR_COPPER.remove(key);
+        }
+        synchronized (ALLOWED_DONATOR_SILVER) {
+            ALLOWED_DONATOR_SILVER.remove(key);
+        }
+        synchronized (ALLOWED_DONATOR_GOLD) {
+            ALLOWED_DONATOR_GOLD.remove(key);
+        }
+
+        switch (tier) {
+            case COPPER -> ALLOWED_DONATOR_COPPER.add(key);
+            case SILVER -> ALLOWED_DONATOR_SILVER.add(key);
+            case GOLD   -> ALLOWED_DONATOR_GOLD.add(key);
+            case NONE   -> { /* nichts */ }
+        }
+
+        saveEligibility();
+    }
 
     private static final class PlayerRewardState {
         Instant daily;

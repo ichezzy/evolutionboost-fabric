@@ -56,7 +56,7 @@ repositories {
     mavenCentral()
     maven("https://maven.fabricmc.net/")
     maven("https://api.modrinth.com/maven")      // Cobblemon (primär)
-    maven("https://cursemaven.com")               // Fallback
+    maven("https://cursemaven.com")              // Fallback
     maven("https://impactdevelopment.github.io/maven/")
     maven("https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/")
     maven("https://maven.impactdev.net/repository/development/")
@@ -65,17 +65,16 @@ repositories {
 }
 
 dependencies {
+    // Versionen für Fabric API gebündelt, 1.21.1
+    val fabricVersion = "0.104.0+1.21.1"
+
     // --- Minecraft + Mappings (WICHTIG: Mojang, kein Yarn) ---
     minecraft("net.minecraft:minecraft:1.21.1")
     mappings(loom.officialMojangMappings())
-    modImplementation(fabricApi.module("fabric-lifecycle-events-v1", "0.104.0+1.21.1"))
 
-    // --- Fabric Loader & API ---
+    // --- Fabric Loader & vollständige Fabric API (inkl. HudRenderCallback usw.) ---
     modImplementation("net.fabricmc:fabric-loader:0.16.5")
-    modRuntimeOnly("net.fabricmc.fabric-api:fabric-api:0.104.0+1.21.1")
-    modImplementation(fabricApi.module("fabric-command-api-v2", "0.104.0+1.21.1"))
-    modImplementation(fabricApi.module("fabric-networking-api-v1", "0.104.0+1.21.1"))
-
+    modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricVersion")
 
     // --- Kotlin-Runtime (Cobblemon benötigt sie) ---
     modImplementation("net.fabricmc:fabric-language-kotlin:1.12.3+kotlin.2.0.21")
@@ -84,7 +83,7 @@ dependencies {
     // Variante A: Modrinth Maven (empfohlen)
     modImplementation("maven.modrinth:cobblemon:1.6.1")
 
-    // Variante B (Fallback): CurseMaven mit exakter File-ID (auskommentiert lassen, nur nutzen falls A bei dir nicht auflöst)
+    // Variante B (Fallback): CurseMaven mit exakter File-ID
     // modImplementation("curse.maven:cobblemon-687131:6125079")
 
     // --- Tests (optional) ---
@@ -94,8 +93,15 @@ dependencies {
 
 tasks.processResources {
     inputs.property("version", project.version)
-    filesMatching("fabric.mod.json") { expand(project.properties) }
+    filesMatching("fabric.mod.json") {
+        expand(project.properties)
+    }
 }
 
-tasks.test { useJUnitPlatform() }
-tasks.jar { from("LICENSE") }
+tasks.test {
+    useJUnitPlatform()
+}
+
+tasks.jar {
+    from("LICENSE")
+}

@@ -1,10 +1,11 @@
 package com.ichezzy.evolutionboost;
 
 import com.ichezzy.evolutionboost.boost.BoostType;
-import com.ichezzy.evolutionboost.hud.BoostHudSync;
+import com.ichezzy.evolutionboost.hud.DimBoostHudPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -13,40 +14,41 @@ import java.util.Locale;
 
 /**
  * Client-Seite:
- *  - empfängt Dim-Boost-Multiplikatoren vom Server
- *  - zeigt links oben ein HUD nur dann an, wenn in der aktuellen Dimension
- *    ein Dim-Boost > 1.0 aktiv ist.
+ * - empfängt Dim-Boost-Multiplikatoren vom Server (S2C Payload)
+ * - zeigt links oben ein HUD nur dann an, wenn in der aktuellen Dimension
+ *   ein Dim-Boost > 1.0 aktiv ist.
  */
 public final class EvolutionBoostClient implements ClientModInitializer {
 
     /** Pro Typ: Dimensionaler Multiplikator (aktuelle Dimension). */
-    private static final EnumMap<BoostType, Double> DIM_MULTS =
-            new EnumMap<>(BoostType.class);
+    private static final EnumMap<BoostType, Double> DIM_MULTS = new EnumMap<>(BoostType.class);
 
     @Override
     public void onInitializeClient() {
+        // Defaultwerte
         for (BoostType t : BoostType.values()) {
-            DIM_MULTS.put(t, 1.0);
+            DIM_MULTS.put(t, 1.0D);
         }
 
-        // Netzwerk-Receiver: nur Dim-Multiplikatoren
+        // --- Netzwerk-Receiver: nur Dim-Multiplikatoren ---
         ClientPlayNetworking.registerGlobalReceiver(
-                BoostHudSync.DIM_HUD_PACKET,
-                (client, handler, buf, responseSender) -> {
-                    double[] dims = new double[BoostType.values().length];
-                    for (int i = 0; i < BoostType.values().length; i++) {
-                        dims[i] = buf.readDouble();
-                    }
+                DimBoostHudPayload.TYPE,
+                (payload, context) -> {
+                    double[] dims = payload.multipliers();
+                    Minecraft client = context.client();
+
+                    // sicherheitshalber auf den Render-Thread schieben
                     client.execute(() -> {
-                        for (int i = 0; i < BoostType.values().length; i++) {
+                        int len = Math.min(BoostType.values().length, dims.length);
+                        for (int i = 0; i < len; i++) {
                             DIM_MULTS.put(BoostType.values()[i], dims[i]);
                         }
                     });
                 }
         );
 
-        // HUD links oben rendern
-        HudRenderCallback.EVENT.register((GuiGraphics graphics, float tickDelta) -> {
+        // --- HUD links oben rendern ---
+        HudRenderCallback.EVENT.register((GuiGraphics graphics, DeltaTracker deltaTracker) -> {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null) return;
 
@@ -54,8 +56,8 @@ public final class EvolutionBoostClient implements ClientModInitializer {
             int y = 4;
 
             for (BoostType type : BoostType.values()) {
-                double dim = DIM_MULTS.getOrDefault(type, 1.0);
-                if (dim <= 1.0001) continue; // nur zeigen, wenn wirklich >1
+                double dim = DIM_MULTS.getOrDefault(type, 1.0D);
+                if (dim <= 1.0001D) continue; // nur zeigen, wenn wirklich >1
 
                 String label = switch (type) {
                     case SHINY -> "Shiny";
