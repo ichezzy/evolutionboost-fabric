@@ -29,6 +29,12 @@ public final class ModItems {
                     "tooltip.evolutionboost.coin_gold")
     );
 
+    public static final Item EVOLUTION_COIN_PLATINUM = register(
+            "evolution_coin_platinum",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.evolution_coin_platinum")
+    );
+
     // ---- Halloween Platzhalter ----
     public static final Item HALLOWEEN_CANDY = register(
             "halloween_candy",
@@ -235,6 +241,12 @@ public final class ModItems {
                     "tooltip.evolutionboost.lost_toy")
     );
 
+    public static final Item RED_NOSE = register(
+            "red_nose",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.red_nose")
+    );
+
     public static final Item SPIRIT_DEW = register(
             "spirit_dew",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
@@ -245,6 +257,12 @@ public final class ModItems {
             "spirit_dew_shards",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.spirit_dew_shards")
+    );
+
+    public static final Item WIND_UP_KEY = register(
+            "wind_up_key",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.wind_up_key")
     );
 
     // ---- Safari / Voucher (Platzhalter) ----

@@ -25,6 +25,7 @@ public final class ModItemGroup {
                             output.accept(ModItems.EVOLUTION_COIN_BRONZE);
                             output.accept(ModItems.EVOLUTION_COIN_SILVER);
                             output.accept(ModItems.EVOLUTION_COIN_GOLD);
+                            output.accept(ModItems.EVOLUTION_COIN_PLATINUM);
 
                             // Halloween
                             output.accept(ModItems.HALLOWEEN_CANDY);
@@ -63,8 +64,10 @@ public final class ModItemGroup {
                             output.accept(ModItems.ICE_QUEEN_RAID_KEY);
                             output.accept(ModItems.KRAMPUS_RAID_KEY);
                             output.accept(ModItems.LOST_TOY);
+                            output.accept(ModItems.RED_NOSE);
                             output.accept(ModItems.SPIRIT_DEW);
                             output.accept(ModItems.SPIRIT_DEW_SHARDS);
+                            output.accept(ModItems.WIND_UP_KEY);
 
                             // Tickets & Voucher
                             output.accept(ModItems.SAFARI_TICKET);

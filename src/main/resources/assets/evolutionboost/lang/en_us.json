@@ -4,6 +4,7 @@
   "item.evolutionboost.evolution_coin_bronze": "Evolution Coin (Bronze)",
   "item.evolutionboost.evolution_coin_silver": "Evolution Coin (Silver)",
   "item.evolutionboost.evolution_coin_gold": "Evolution Coin (Gold)",
+  "item.evolutionboost.evolution_coin_platinum": "Evolution Coin (Platinum)",
 
   "item.evolutionboost.halloween_candy": "Halloween Candy",
   "item.evolutionboost.halloween_candy_blue": "Blue Halloween Candy",
@@ -50,12 +51,15 @@
   "item.evolutionboost.ice_queen_raid_key": "Ice Queen Raid Key",
   "item.evolutionboost.krampus_raid_key": "Krampus Raid Key",
   "item.evolutionboost.lost_toy": "Lost Toy",
+  "item.evolutionboost.red_nose": "Rudolph's Red Nose",
   "item.evolutionboost.spirit_dew": "Spirit Dew",
   "item.evolutionboost.spirit_dew_shards": "Spirit Dew Shards",
+  "item.evolutionboost.wind_up_key": "Wind Up Key",
 
   "tooltip.evolutionboost.coin_bronze": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
   "tooltip.evolutionboost.coin_silver": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
   "tooltip.evolutionboost.coin_gold": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
+  "tooltip.evolutionboost.coin_platinum": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
 
   "tooltip.evolutionboost.halloween_candy": "Trick or treat! Maybe some Pokémon could use this in some way?",
   "tooltip.evolutionboost.halloween_candy_blue": "Trick or treat! This item can be exchanged for goodies!",
@@ -102,6 +106,8 @@
   "tooltip.evolutionboost.ice_queen_raid_key": "A key that emits a freezing aura. Can be used to open the Ice Queen raid.",
   "tooltip.evolutionboost.krampus_raid_key": "A key that emits a sinister aura. Can be used to open the Ice Queen raid.",
   "tooltip.evolutionboost.lost_toy": "A toy that the Yeti lost. Perhaps a special Pokémon can use it?",
+  "tooltip.evolutionboost.red_nose": "The red nose of Rudolph. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.spirit_dew": "This dew glows in polar lights. It has the potential of summoning a mighty hound.",
-  "tooltip.evolutionboost.spirit_dew_shards": "Remnants of a legendary dew. It is said that once its true potential is unlocked, it can summon a mighty hound."
+  "tooltip.evolutionboost.spirit_dew_shards": "Remnants of a legendary dew. It is said that once its true potential is unlocked, it can summon a mighty hound.",
+  "tooltip.evolutionboost.wind_up_key": "A wind up key that is used for toys. Perhaps a special Pokémon can use it?"
 }
