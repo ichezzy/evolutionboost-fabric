@@ -20,7 +20,7 @@ import java.lang.reflect.Method;
 /**
  * Shiny-Hook:
  * - hängt direkt an CobblemonEvents.POKEMON_ENTITY_SPAWN
- * - liest den SHINY-Boost (GLOBAL) aus BoostManager
+ * - liest den SHINY-Boost (GLOBAL × DIMENSION) aus BoostManager
  * - forciert zusätzliche Shiny-Rolls anhand der shinyBaseOdds-Config
  */
 public final class ShinyHook {
@@ -67,8 +67,8 @@ public final class ShinyHook {
 
         ResourceKey<Level> dimKey = entity.level().dimension();
 
-        // Aktuell nur GLOBAL-Boost (kein Player-Scope mehr)
-        double mult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null);
+        // NEU: GLOBAL × DIMENSION statt nur GLOBAL
+        double mult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null, dimKey);
         if (mult <= 1.0) {
             return; // kein Extra-Boost aktiv
         }

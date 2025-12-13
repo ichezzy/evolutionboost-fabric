@@ -1,1 +1,1 @@
-{ "parent": "minecraft:item/generated", "textures": { "layer0": "evolutionboost:item/christmal_ball_blue" } }
+{ "parent": "minecraft:item/generated", "textures": { "layer0": "evolutionboost:item/christmas_ball_blue" } }

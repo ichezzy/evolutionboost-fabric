@@ -157,6 +157,24 @@ public final class ModItems {
                     "tooltip.evolutionboost.christmas_loot_sack")
     );
 
+    public static final Item CHRISTMAS_SWEATER_BLUE = register(
+            "christmas_sweater_blue",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.christmas_sweater_blue")
+    );
+
+    public static final Item CHRISTMAS_SWEATER_RED = register(
+            "christmas_sweater_red",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.christmas_sweater_red")
+    );
+
+    public static final Item CHRISTMAS_TWIG = register(
+            "christmas_twig",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.christmas_twig")
+    );
+
     public static final Item CURSED_COAL = register(
             "cursed_coal",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
