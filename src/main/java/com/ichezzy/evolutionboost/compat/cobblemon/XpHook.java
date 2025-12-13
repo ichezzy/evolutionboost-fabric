@@ -96,7 +96,16 @@ public final class XpHook {
 
         // --- 4) Booster anwenden: GLOBAL × DIMENSION ---
         BoostManager bm = BoostManager.get(server);
-        double mult = bm.getMultiplierFor(BoostType.XP, null, dimKey);
+
+        double globalMult = bm.getMultiplierFor(BoostType.XP, null); // nur globale
+        double dimMult = bm.getDimensionMultiplier(BoostType.XP, dimKey);
+        double mult = globalMult * dimMult;
+
+        EvolutionBoost.LOGGER.debug(
+                "[compat][xp][debug] dim={} baseXp={} globalMult={} dimMult={} totalMult={}",
+                dimKey.location(), baseXp, globalMult, dimMult, mult
+        );
+
         if (mult <= 1.0) {
             return; // kein Boost aktiv
         }

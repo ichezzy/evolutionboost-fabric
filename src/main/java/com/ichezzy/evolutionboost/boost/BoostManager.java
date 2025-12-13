@@ -119,12 +119,32 @@ public class BoostManager extends SavedData {
                 .filter(e -> typeOrNull == null || e.getValue().type == typeOrNull)
                 .map(Map.Entry::getKey).collect(Collectors.toList());
         keys.forEach(this::removeActiveAndBar);
+        EvolutionBoost.LOGGER.info("[Boost] Cleared {} GLOBAL boosts (typeFilter={})", keys.size(),
+                typeOrNull == null ? "ALL" : typeOrNull);
         return keys.size();
     }
 
+    /** Jetzt: löscht GLOBAL + alle dimensionalen Boosts (Config + Cache). */
     public int clearAll() {
+        // 1) globale Boosts
         var keys = new ArrayList<>(active.keySet());
         keys.forEach(this::removeActiveAndBar);
+
+        // 2) dimensionale Multiplikatoren
+        for (BoostType t : BoostType.values()) {
+            dimensionMults.get(t).clear();
+        }
+
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        int dimCount = cfg.dimensionBoosts != null ? cfg.dimensionBoosts.size() : 0;
+        cfg.dimensionBoosts.clear();
+        EvolutionBoostConfig.save();
+
+        EvolutionBoost.LOGGER.info(
+                "[Boost] Cleared {} global boosts and {} dimension boost entries",
+                keys.size(), dimCount
+        );
+
         return keys.size();
     }
 
@@ -155,8 +175,10 @@ public class BoostManager extends SavedData {
             if (byType.isEmpty()) {
                 cfg.dimensionBoosts.remove(dimKey);
             }
+            EvolutionBoost.LOGGER.info("[Boost][dim] Removed dim boost for dim={} type={}", dimKey, type);
         } else {
             byType.put(type.name(), clamped);
+            EvolutionBoost.LOGGER.info("[Boost][dim] Set dim boost dim={} type={} mult={}", dimKey, type, clamped);
         }
         EvolutionBoostConfig.save();
     }
@@ -175,6 +197,7 @@ public class BoostManager extends SavedData {
             }
             EvolutionBoostConfig.save();
         }
+        EvolutionBoost.LOGGER.info("[Boost][dim] Cleared dim={} type={} from config & cache", dimKey, type);
     }
 
     public void clearAllDimensionMultipliers(ResourceKey<Level> dim) {
@@ -184,13 +207,23 @@ public class BoostManager extends SavedData {
         }
 
         EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-        cfg.dimensionBoosts.remove(dim.location().toString());
+        String key = dim.location().toString();
+        cfg.dimensionBoosts.remove(key);
         EvolutionBoostConfig.save();
+
+        EvolutionBoost.LOGGER.info("[Boost][dim] Cleared all dimension boosts for dim={}", key);
     }
 
     public double getDimensionMultiplier(BoostType type, ResourceKey<Level> dim) {
         if (dim == null) return 1.0;
-        return dimensionMults.get(type).getOrDefault(dim, 1.0);
+        double mult = dimensionMults.get(type).getOrDefault(dim, 1.0);
+        if (mult != 1.0) {
+            EvolutionBoost.LOGGER.debug(
+                    "[Boost][dim] getDimensionMultiplier type={} dim={} -> {}",
+                    type, dim.location(), mult
+            );
+        }
+        return mult;
     }
 
     /**
@@ -205,8 +238,12 @@ public class BoostManager extends SavedData {
         }
 
         if (cfg.dimensionBoosts == null || cfg.dimensionBoosts.isEmpty()) {
+            EvolutionBoost.LOGGER.info("[Boost][dim] No dimension boosts in config (nothing to load).");
             return;
         }
+
+        EvolutionBoost.LOGGER.info("[Boost][dim] Reloading dimension boosts from config ({} dimensions)…",
+                cfg.dimensionBoosts.size());
 
         for (var dimEntry : cfg.dimensionBoosts.entrySet()) {
             String dimKey = dimEntry.getKey();
@@ -214,24 +251,28 @@ public class BoostManager extends SavedData {
             try {
                 rl = ResourceLocation.parse(dimKey);
             } catch (Exception e) {
-                EvolutionBoost.LOGGER.warn("[Boost] Invalid dimension key in config: {}", dimKey);
+                EvolutionBoost.LOGGER.warn("[Boost][dim] Invalid dimension key in config: {}", dimKey);
                 continue;
             }
             ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, rl);
             Map<String, Double> byType = dimEntry.getValue();
-            if (byType == null) continue;
+            if (byType == null || byType.isEmpty()) continue;
 
             for (var typeEntry : byType.entrySet()) {
                 BoostType type;
                 try {
                     type = BoostType.valueOf(typeEntry.getKey());
                 } catch (IllegalArgumentException ex) {
-                    EvolutionBoost.LOGGER.warn("[Boost] Invalid boost type for dimension {}: {}", dimKey, typeEntry.getKey());
+                    EvolutionBoost.LOGGER.warn("[Boost][dim] Invalid boost type for dimension {}: {}", dimKey, typeEntry.getKey());
                     continue;
                 }
                 Double val = typeEntry.getValue();
                 if (val == null || val <= 0.0) continue;
                 dimensionMults.get(type).put(dim, val);
+                EvolutionBoost.LOGGER.info(
+                        "[Boost][dim] Loaded dim boost dim={} type={} mult={}",
+                        dim.location(), type, val
+                );
             }
         }
     }
@@ -244,17 +285,31 @@ public class BoostManager extends SavedData {
     /** GLOBAL × DIMENSION. Player-spezifische Boosts existieren nicht mehr. */
     public double getMultiplierFor(BoostType type, java.util.UUID ignoredPlayer, ResourceKey<Level> dimOrNull) {
         long now = System.currentTimeMillis();
-        double mult = 1.0;
+        double globalMult = 1.0;
 
         for (ActiveBoost ab : active.values()) {
             if (ab.type != type) continue;
             if (ab.endTimeMs < now) continue;
             // es gibt nur GLOBAL-Boosts
-            mult *= ab.multiplier;
+            globalMult *= ab.multiplier;
         }
 
-        mult *= getDimensionMultiplier(type, dimOrNull);
-        return mult;
+        double dimMult = getDimensionMultiplier(type, dimOrNull);
+        double total = globalMult * dimMult;
+
+        if (dimOrNull != null) {
+            EvolutionBoost.LOGGER.debug(
+                    "[Boost][dim] getMultiplierFor type={} dim={} global={} dimMult={} total={}",
+                    type, dimOrNull.location(), globalMult, dimMult, total
+            );
+        } else if (globalMult != 1.0) {
+            EvolutionBoost.LOGGER.debug(
+                    "[Boost][dim] getMultiplierFor type={} dim=<null> global={} total={}",
+                    type, globalMult, total
+            );
+        }
+
+        return total;
     }
 
     // ---------- Tick / Bossbars ----------
