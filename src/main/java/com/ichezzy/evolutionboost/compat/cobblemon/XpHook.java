@@ -15,6 +15,7 @@ import net.minecraft.world.level.Level;
 
 import java.lang.reflect.Method;
 import java.util.Locale;
+import java.util.UUID;
 
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.find;
 import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.findAny;
@@ -28,6 +29,8 @@ import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.findAny;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class XpHook {
     private XpHook() {}
+
+    private static final boolean DEBUG_XP = true; // Bei Bedarf auf false setzen
 
     /**
      * Alte Signatur für HooksRegistrar – clsEvents/priority werden nicht mehr benötigt.
@@ -66,6 +69,13 @@ public final class XpHook {
      *   - ev.getExperience()/setExperience(int): XP-Menge
      */
     private static void handleXp(MinecraftServer server, Object ev) {
+        if (server == null || ev == null) {
+            return;
+        }
+
+        // --- 0) Pokemon aus dem Event holen (für Owner-Fallback) ---
+        Object pokemon = extractPokemon(ev);
+
         // --- 1) Quelle prüfen: nur Battle-XP ---
         Object src = invokeNoArg(ev, "getSource", "source");
         if (src == null) {
@@ -77,12 +87,20 @@ public final class XpHook {
         }
 
         // --- 2) Player & Level bestimmen ---
-        ServerPlayer player = extractServerPlayer(ev, src);
+        ServerPlayer player = extractServerPlayer(ev, src, pokemon, server);
         ServerLevel level = (player != null)
                 ? player.serverLevel()
                 : extractServerLevel(ev, src, server);
 
         if (level == null) {
+            if (DEBUG_XP) {
+                EvolutionBoost.LOGGER.info(
+                        "[compat][xp][debug] no ServerLevel found for event={}, source={}, pokemon={}",
+                        ev.getClass().getName(),
+                        src.getClass().getName(),
+                        pokemon != null ? pokemon.getClass().getName() : "null"
+                );
+            }
             return;
         }
 
@@ -96,15 +114,16 @@ public final class XpHook {
 
         // --- 4) Booster anwenden: GLOBAL × DIMENSION ---
         BoostManager bm = BoostManager.get(server);
+        double mult = bm.getMultiplierFor(BoostType.XP, null, dimKey);
 
-        double globalMult = bm.getMultiplierFor(BoostType.XP, null); // nur globale
-        double dimMult = bm.getDimensionMultiplier(BoostType.XP, dimKey);
-        double mult = globalMult * dimMult;
-
-        EvolutionBoost.LOGGER.debug(
-                "[compat][xp][debug] dim={} baseXp={} globalMult={} dimMult={} totalMult={}",
-                dimKey.location(), baseXp, globalMult, dimMult, mult
-        );
+        if (DEBUG_XP) {
+            EvolutionBoost.LOGGER.info(
+                    "[compat][xp][debug] dim={} baseXp={} mult={}",
+                    dimKey.location(),
+                    baseXp,
+                    mult
+            );
+        }
 
         if (mult <= 1.0) {
             return; // kein Boost aktiv
@@ -118,14 +137,14 @@ public final class XpHook {
             return;
         }
 
-        EvolutionBoost.LOGGER.debug(
+        EvolutionBoost.LOGGER.info(
                 "[compat][xp] boosted battle XP in {} from {} to {} (mult={})",
                 dimKey.location(), baseXp, boosted, mult
         );
     }
 
     /* ------------------------------------------------------------------ */
-    /* Helper                                                             */
+    /* Battle-Source-Check                                                */
     /* ------------------------------------------------------------------ */
 
     /** Prüft möglichst robust, ob die Source Battle-XP ist. */
@@ -144,6 +163,10 @@ public final class XpHook {
         String name = src.getClass().getName().toLowerCase(Locale.ROOT);
         return name.contains("battle");
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Reflection-Helper für Werte                                        */
+    /* ------------------------------------------------------------------ */
 
     private static Object invokeNoArg(Object target, String... methodNames) {
         if (target == null) return null;
@@ -190,36 +213,80 @@ public final class XpHook {
         return written;
     }
 
-    private static ServerPlayer extractServerPlayer(Object ev, Object src) {
-        // a) direkt aus dem Event
-        try {
-            Method m = findAny(ev.getClass(),
-                    "getPlayer", "player",
-                    "getServerPlayer", "serverPlayer"
-            );
-            if (m != null) {
-                Object o = m.invoke(ev);
-                if (o instanceof ServerPlayer sp) {
-                    return sp;
-                }
-            }
-        } catch (Throwable ignored) {}
+    /* ------------------------------------------------------------------ */
+    /* Spieler / Dimension                                                */
+    /* ------------------------------------------------------------------ */
 
-        // b) aus der Source
+    private static ServerPlayer extractServerPlayer(Object ev, Object src, Object pokemon, MinecraftServer server) {
+        // 1) direkte Player-Referenz im Event
+        ServerPlayer p = extractDirectPlayer(ev);
+        if (p != null) return p;
+
+        // 2) direkte Player-Referenz in der Source
+        p = extractDirectPlayer(src);
+        if (p != null) return p;
+
+        // 3) Player-UUID im Event
+        UUID id = extractPlayerId(ev);
+        if (id != null) {
+            ServerPlayer fromId = server.getPlayerList().getPlayer(id);
+            if (fromId != null) return fromId;
+        }
+
+        // 4) Player-UUID in der Source
+        id = extractPlayerId(src);
+        if (id != null) {
+            ServerPlayer fromId = server.getPlayerList().getPlayer(id);
+            if (fromId != null) return fromId;
+        }
+
+        // 5) Fallback: Besitzer über das Pokemon
+        if (pokemon != null) {
+            ServerPlayer fromPokemon = extractPlayerFromPokemon(pokemon, server);
+            if (fromPokemon != null) return fromPokemon;
+        }
+
+        // 6) nichts gefunden -> null (Level wird dann separat bestimmt)
+        return null;
+    }
+
+    private static ServerPlayer extractDirectPlayer(Object obj) {
+        if (obj == null) return null;
         try {
-            Method m = findAny(src.getClass(),
+            Method m = findAny(obj.getClass(),
                     "getPlayer", "player",
                     "getServerPlayer", "serverPlayer",
+                    "getUser", "user",
                     "getTrainer"
             );
             if (m != null) {
-                Object o = m.invoke(src);
+                Object o = m.invoke(obj);
                 if (o instanceof ServerPlayer sp) {
                     return sp;
                 }
             }
         } catch (Throwable ignored) {}
+        return null;
+    }
 
+    private static UUID extractPlayerId(Object obj) {
+        if (obj == null) return null;
+        String[] candidates = {
+                "getPlayerId", "getPlayerUUID", "getUuid", "getUUID", "getPlayerUuid", "playerId"
+        };
+        for (String name : candidates) {
+            try {
+                Method m = findAny(obj.getClass(), name);
+                if (m == null) continue;
+                Object o = m.invoke(obj);
+                if (o instanceof UUID u) return u;
+                if (o instanceof String s) {
+                    try {
+                        return UUID.fromString(s);
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            } catch (Throwable ignored) {}
+        }
         return null;
     }
 
@@ -250,6 +317,89 @@ public final class XpHook {
         try {
             return server.overworld();
         } catch (Throwable ignored) {}
+
+        return null;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Pokemon / Owner                                                    */
+    /* ------------------------------------------------------------------ */
+
+    private static Object extractPokemon(Object ev) {
+        if (ev == null) return null;
+        // Versuche getPokemon()
+        try {
+            Method m = findAny(ev.getClass(), "getPokemon", "pokemon");
+            if (m != null) {
+                return m.invoke(ev);
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /**
+     * Versucht über das Pokemon den Besitzer (ServerPlayer) herauszufinden.
+     * Wir probieren verschiedene übliche Methoden/Patterns:
+     *  - getOwnerId(), getOwnerUUID() -> UUID
+     *  - getOwner() -> ServerPlayer oder etwas, das einen Spieler referenziert
+     */
+    private static ServerPlayer extractPlayerFromPokemon(Object pokemon, MinecraftServer server) {
+        if (pokemon == null || server == null) return null;
+
+        // 1) UUID-basierte Owner-Methoden
+        String[] idMethods = {
+                "getOwnerId", "getOwnerUUID", "getOwnerUuid", "getOwnerPlayerUUID"
+        };
+        for (String name : idMethods) {
+            try {
+                Method m = findAny(pokemon.getClass(), name);
+                if (m == null) continue;
+                Object o = m.invoke(pokemon);
+                UUID uuid = null;
+                if (o instanceof UUID u) {
+                    uuid = u;
+                } else if (o instanceof String s) {
+                    try {
+                        uuid = UUID.fromString(s);
+                    } catch (IllegalArgumentException ignored) {}
+                }
+                if (uuid != null) {
+                    ServerPlayer sp = server.getPlayerList().getPlayer(uuid);
+                    if (sp != null) {
+                        if (DEBUG_XP) {
+                            EvolutionBoost.LOGGER.info(
+                                    "[compat][xp][debug] resolved player via Pokemon owner UUID {} -> {}",
+                                    uuid, sp.getGameProfile().getName()
+                            );
+                        }
+                        return sp;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 2) Direktes Owner-Objekt
+        String[] ownerMethods = {
+                "getOwner", "owner", "getOwnerPlayer", "ownerPlayer"
+        };
+        for (String name : ownerMethods) {
+            try {
+                Method m = findAny(pokemon.getClass(), name);
+                if (m == null) continue;
+                Object o = m.invoke(pokemon);
+                if (o instanceof ServerPlayer sp) {
+                    if (DEBUG_XP) {
+                        EvolutionBoost.LOGGER.info(
+                                "[compat][xp][debug] resolved player via Pokemon owner object {}",
+                                sp.getGameProfile().getName()
+                        );
+                    }
+                    return sp;
+                }
+                // Falls in Zukunft etwas wie "PokemonOwner" zurückkommt,
+                // könnte man hier weitere Reflection ansetzen (getPlayer(), getUuid(), ...)
+            } catch (Throwable ignored) {}
+        }
 
         return null;
     }
