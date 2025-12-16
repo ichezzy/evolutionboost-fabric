@@ -9,6 +9,7 @@ import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
 import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
+import com.ichezzy.evolutionboost.item.ShinyCharmItem;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
 import net.minecraft.resources.ResourceKey;
@@ -20,7 +21,7 @@ import java.lang.reflect.Method;
 /**
  * Shiny-Hook:
  * - hängt direkt an CobblemonEvents.POKEMON_ENTITY_SPAWN
- * - liest den SHINY-Boost (GLOBAL × DIMENSION) aus BoostManager
+ * - liest den SHINY-Boost (GLOBAL × DIMENSION × CHARM) aus BoostManager + ShinyCharmItem
  * - forciert zusätzliche Shiny-Rolls anhand der shinyBaseOdds-Config
  */
 public final class ShinyHook {
@@ -67,8 +68,15 @@ public final class ShinyHook {
 
         ResourceKey<Level> dimKey = entity.level().dimension();
 
-        // NEU: GLOBAL × DIMENSION statt nur GLOBAL
-        double mult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null, dimKey);
+        // Basis-Multiplikator: GLOBAL × DIMENSION
+        double baseMult = BoostManager.get(server).getMultiplierFor(BoostType.SHINY, null, dimKey);
+
+        // Shiny Charm Multiplikator (prüft ob ein Spieler mit Charm in der Nähe ist)
+        double charmMult = ShinyCharmItem.getCharmMultiplierNear(entity);
+
+        // Gesamt-Multiplikator
+        double mult = baseMult * charmMult;
+
         if (mult <= 1.0) {
             return; // kein Extra-Boost aktiv
         }
@@ -104,8 +112,8 @@ public final class ShinyHook {
         if (roll < extraChance) {
             setShiny(pokemon, true);
             EvolutionBoost.LOGGER.debug(
-                    "[compat][shiny] Force-shiny applied (mult={}, dim={}, extraChance={})",
-                    mult, dimKey.location(), extraChance
+                    "[compat][shiny] Force-shiny applied (baseMult={}, charmMult={}, totalMult={}, dim={}, extraChance={})",
+                    baseMult, charmMult, mult, dimKey.location(), extraChance
             );
         }
     }

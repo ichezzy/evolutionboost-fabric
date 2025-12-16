@@ -107,6 +107,15 @@ public class BoostManager extends SavedData {
     // ---------- API: hinzufügen/entfernen (GLOBAL) ----------
 
     public String addBoost(MinecraftServer server, ActiveBoost ab) {
+        // Max-Limit aus Config anwenden
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        double maxMult = cfg.maxBoostMultiplier > 0 ? cfg.maxBoostMultiplier : 10.0;
+        if (ab.multiplier > maxMult) {
+            double original = ab.multiplier;
+            ab.multiplier = maxMult;
+            EvolutionBoost.LOGGER.info("[Boost] Multiplier capped from {} to max: {}", original, maxMult);
+        }
+
         String key = makeKey(ab);
         ab.bossBarId = key;
         active.put(key, ab);
@@ -152,10 +161,18 @@ public class BoostManager extends SavedData {
      */
     public void setDimensionMultiplier(BoostType type, ResourceKey<Level> dim, double multiplier) {
         if (dim == null) return;
-        double clamped = Math.max(0.0, multiplier);
+
+        // Max-Limit aus Config anwenden
+        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        double maxMult = cfg.maxBoostMultiplier > 0 ? cfg.maxBoostMultiplier : 10.0;
+        double clamped = Math.max(0.0, Math.min(multiplier, maxMult));
+
+        if (clamped != multiplier) {
+            EvolutionBoost.LOGGER.info("[Boost][dim] Multiplier capped from {} to max: {}", multiplier, maxMult);
+        }
+
         dimensionMults.get(type).put(dim, clamped);
 
-        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
         String dimKey = dim.location().toString();
         Map<String, Double> byType = cfg.dimensionBoosts
                 .computeIfAbsent(dimKey, k -> new LinkedHashMap<>());

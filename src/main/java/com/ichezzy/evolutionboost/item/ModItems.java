@@ -141,8 +141,14 @@ public final class ModItems {
 
     public static final Item CHRISTMAS_BERRY = register(
             "christmas_berry",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.christmas_berry")
+    );
+
+    public static final Item CHRISTMAS_CANDY = register(
+            "christmas_candy",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.christmas_candy")
     );
 
     public static final Item CHRISTMAS_HAT = register(

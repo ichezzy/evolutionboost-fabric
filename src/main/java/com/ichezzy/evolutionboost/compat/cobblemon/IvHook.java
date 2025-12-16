@@ -11,9 +11,9 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,33 +76,18 @@ public final class IvHook {
             return;
         }
 
-        // --- 1) Spieler ermitteln ---
-        UUID playerId = extractPlayerId(ev);
-        ServerPlayer player = playerId != null
-                ? server.getPlayerList().getPlayer(playerId)
-                : null;
-
-        ResourceKey<Level> dimKey = null;
-        if (player != null) {
-            ServerLevel lvl = player.serverLevel();
-            dimKey = lvl.dimension();
-        }
-
-        // --- 2) Pokémon aus dem Event holen ---
+        // --- 1) Pokémon aus dem Event holen ---
         Object pokemon = extractPokemon(ev);
         if (pokemon == null) {
             return;
         }
 
-        // --- 3) Multiplier bestimmen ---
-        BoostManager bm = BoostManager.get(server);
-        double mult;
+        // --- 2) Dimension ermitteln (mehrere Fallbacks) ---
+        ResourceKey<Level> dimKey = extractDimension(ev, pokemon, server);
 
-        if (dimKey != null) {
-            mult = bm.getMultiplierFor(BoostType.IV, null, dimKey);
-        } else {
-            mult = bm.getMultiplierFor(BoostType.IV, null);
-        }
+        // --- 3) Multiplier bestimmen (GLOBAL × DIMENSION) ---
+        BoostManager bm = BoostManager.get(server);
+        double mult = bm.getMultiplierFor(BoostType.IV, null, dimKey);
 
         if (mult <= 1.0) {
             // kein IV-Boost aktiv
@@ -190,7 +175,48 @@ public final class IvHook {
     }
 
     /* ------------------------------------------------------------------ */
-    /* Reflection-Helper für PokemonGainedEvent                           */
+    /* Dimension-Extraktion mit mehreren Fallbacks                        */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Versucht die Dimension aus verschiedenen Quellen zu ermitteln:
+     * 1. Player aus Event -> Player.serverLevel()
+     * 2. Pokemon Entity -> Entity.level()
+     * 3. Pokemon.getOwnerUUID() -> Player -> serverLevel()
+     *
+     * Gibt niemals null zurück - im schlimmsten Fall Overworld.
+     */
+    private static ResourceKey<Level> extractDimension(Object ev, Object pokemon, MinecraftServer server) {
+        // 1) Versuche Player aus Event
+        UUID playerId = extractPlayerId(ev);
+        if (playerId != null) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                return player.serverLevel().dimension();
+            }
+        }
+
+        // 2) Versuche Entity aus Pokemon zu holen (falls Pokemon in der Welt ist)
+        Entity pokemonEntity = extractEntityFromPokemon(pokemon);
+        if (pokemonEntity != null && pokemonEntity.level() instanceof ServerLevel sl) {
+            return sl.dimension();
+        }
+
+        // 3) Versuche Owner-UUID aus Pokemon -> Player
+        UUID ownerUuid = extractOwnerUuid(pokemon);
+        if (ownerUuid != null) {
+            ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+            if (owner != null) {
+                return owner.serverLevel().dimension();
+            }
+        }
+
+        // 4) Fallback: Overworld
+        return Level.OVERWORLD;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Reflection-Helper                                                  */
     /* ------------------------------------------------------------------ */
 
     private static UUID extractPlayerId(Object ev) {
@@ -209,6 +235,45 @@ public final class IvHook {
             Method m = ev.getClass().getMethod("getPokemon");
             return m.invoke(ev);
         } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /**
+     * Versucht das Entity-Objekt aus einem Pokemon zu extrahieren.
+     * Pokemon.getEntity() gibt das PokemonEntity zurück, falls es in der Welt gespawnt ist.
+     */
+    private static Entity extractEntityFromPokemon(Object pokemon) {
+        if (pokemon == null) return null;
+
+        String[] methodNames = {"getEntity", "entity"};
+        for (String name : methodNames) {
+            try {
+                Method m = pokemon.getClass().getMethod(name);
+                Object o = m.invoke(pokemon);
+                if (o instanceof Entity e) {
+                    return e;
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    /**
+     * Versucht die Owner-UUID aus einem Pokemon zu extrahieren.
+     */
+    private static UUID extractOwnerUuid(Object pokemon) {
+        if (pokemon == null) return null;
+
+        String[] methodNames = {"getOwnerUUID", "getOwnerUuid", "getOwnerId", "ownerUUID"};
+        for (String name : methodNames) {
+            try {
+                Method m = pokemon.getClass().getMethod(name);
+                Object o = m.invoke(pokemon);
+                if (o instanceof UUID u) {
+                    return u;
+                }
+            } catch (Throwable ignored) {}
+        }
         return null;
     }
 }

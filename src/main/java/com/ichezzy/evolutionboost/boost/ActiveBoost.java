@@ -3,7 +3,7 @@ package com.ichezzy.evolutionboost.boost;
 public class ActiveBoost {
     public final BoostType type;
     public final BoostScope scope;
-    public final double multiplier;
+    public double multiplier;
     public final long startTimeMs;
     public final long durationMs;
     public final long endTimeMs;

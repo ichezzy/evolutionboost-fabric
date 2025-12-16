@@ -49,30 +49,44 @@ public final class EvolutionBoostConfig {
      */
     public Map<String, Map<String, Double>> dimensionBoosts = new LinkedHashMap<>();
 
+    // ==================== General Settings ====================
+
     /** Maximale erlaubte Boost-Multiplikation (z. B. 10.0) */
-    public double maxBoostMultiplier = 10.0;
+    public double maxBoostMultiplier = 100.0;
 
     /**
      * Basischance für Shiny-Rolls (1 in shinyBaseOdds).
-     * Sollte zur Cobblemon-Config passen (z.B. 8192).
+     * Sollte zur Cobblemon-Config passen (Standard: 8192).
+     * Wird für die Boost-Berechnung im ShinyHook verwendet.
      */
     public int shinyBaseOdds = 8192;
 
-    /** Shiny Charm Ziel-Odds (1 in shinyCharmTargetOdds), z.B. halb so selten wie Basis (4096). */
-    public boolean shinyCharmEnabled = false;
-    public int shinyCharmTargetOdds = 4096;
+    // ==================== Shiny Charm Settings ====================
 
-    /** Christmas-Event Settings (derzeit ggf. ungenutzt, aber belassen für Kompatibilität). */
-    public boolean christmasDebug = false;
-    /** Ein Blizzard pro ... Minuten (z. B. 60) */
+    /** Ob der Shiny Charm aktiviert ist */
+    public boolean shinyCharmEnabled = true;
+
+    /** Multiplikator für Shiny-Chance wenn Charm in der Nähe (z.B. 2.0 = doppelte Chance) */
+    public double shinyCharmMultiplier = 100.0;
+
+    /** Radius in Blöcken, in dem der Charm wirkt */
+    public double shinyCharmRadius = 64.0;
+
+    // ==================== Christmas Event Settings ====================
+
+    /** Basis-Multiplikator für Christmas (ohne Sturm) - gilt für SHINY, XP, IV */
+    public double christmasBaseMultiplier = 1.5;
+
+    /** Multiplikator während des Sturms - gilt für SHINY, XP, IV */
+    public double christmasStormMultiplier = 2.0;
+
+    /** Sturm-Intervall in Minuten (wenn Auto aktiviert) */
     public int christmasStormEveryMinutes = 60;
-    /** Dauer pro Blizzard in Minuten (z. B. 6) */
+
+    /** Sturm-Dauer in Minuten */
     public int christmasStormDurationMinutes = 6;
-    /** Sichtreduktions-Faktor während Blizzard (nur Info/Servereffekte; Client-Fog optional) */
-    public double christmasVisibilityFactor = 0.7;
-    /** Dimensionale Multiplikatoren, die NUR während Blizzard gelten: */
-    public double christmasXpMultiplierDuringStorm = 2.0;
-    public double christmasShinyMultiplierDuringStorm = 1.5;
+
+    // ==================== Singleton & IO ====================
 
     private static volatile EvolutionBoostConfig INSTANCE;
 
@@ -119,17 +133,35 @@ public final class EvolutionBoostConfig {
         }
 
         // Fallbacks für alte Configs ohne neue Felder
-        if (INSTANCE.shinyBaseOdds <= 0) {
-            INSTANCE.shinyBaseOdds = 8192;
-        }
         if (INSTANCE.maxBoostMultiplier <= 0) {
             INSTANCE.maxBoostMultiplier = 10.0;
         }
-        if (INSTANCE.shinyCharmTargetOdds <= 0) {
-            INSTANCE.shinyCharmTargetOdds = 4096;
+        if (INSTANCE.shinyBaseOdds <= 0) {
+            INSTANCE.shinyBaseOdds = 8192;
+        }
+        if (INSTANCE.shinyCharmMultiplier <= 0) {
+            INSTANCE.shinyCharmMultiplier = 100.0;
+        }
+        if (INSTANCE.shinyCharmRadius <= 0) {
+            INSTANCE.shinyCharmRadius = 64.0;
         }
         if (INSTANCE.dimensionBoosts == null) {
             INSTANCE.dimensionBoosts = new LinkedHashMap<>();
+        }
+        if (INSTANCE.eventSpawns == null) {
+            INSTANCE.eventSpawns = new LinkedHashMap<>();
+        }
+        if (INSTANCE.christmasBaseMultiplier <= 0) {
+            INSTANCE.christmasBaseMultiplier = 1.5;
+        }
+        if (INSTANCE.christmasStormMultiplier <= 0) {
+            INSTANCE.christmasStormMultiplier = 2.0;
+        }
+        if (INSTANCE.christmasStormEveryMinutes <= 0) {
+            INSTANCE.christmasStormEveryMinutes = 60;
+        }
+        if (INSTANCE.christmasStormDurationMinutes <= 0) {
+            INSTANCE.christmasStormDurationMinutes = 6;
         }
 
         return INSTANCE;
@@ -149,20 +181,25 @@ public final class EvolutionBoostConfig {
 
     private static EvolutionBoostConfig defaults() {
         EvolutionBoostConfig c = new EvolutionBoostConfig();
-        c.maxBoostMultiplier = 10.0;
+
+        // General Settings
+        c.maxBoostMultiplier = 100.0;
         c.shinyBaseOdds = 8192;
-        c.shinyCharmEnabled = false;
-        c.shinyCharmTargetOdds = 4096;
 
+        // Shiny Charm
+        c.shinyCharmEnabled = true;
+        c.shinyCharmMultiplier = 100.0;
+        c.shinyCharmRadius = 64.0;
+
+        // Maps
         c.dimensionBoosts = new LinkedHashMap<>();
+        c.eventSpawns = new LinkedHashMap<>();
 
-        // Christmas defaults (ggf. später komplett entfernen, wenn Code bereinigt ist)
-        c.christmasDebug = false;
+        // Christmas Settings
+        c.christmasBaseMultiplier = 1.5;
+        c.christmasStormMultiplier = 2.0;
         c.christmasStormEveryMinutes = 60;
         c.christmasStormDurationMinutes = 6;
-        c.christmasVisibilityFactor = 0.7;
-        c.christmasXpMultiplierDuringStorm = 2.0;
-        c.christmasShinyMultiplierDuringStorm = 1.5;
 
         return c;
     }

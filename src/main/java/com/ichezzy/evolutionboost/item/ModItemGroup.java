@@ -48,6 +48,7 @@ public final class ModItemGroup {
                             output.accept(ModItems.CHRISTMAS_BALL_GREEN);
                             output.accept(ModItems.CHRISTMAS_BALL_RED);
                             output.accept(ModItems.CHRISTMAS_BERRY);
+                            output.accept(ModItems.CHRISTMAS_CANDY);
                             output.accept(ModItems.CHRISTMAS_HAT);
                             output.accept(ModItems.CHRISTMAS_LOOT_SACK);
                             output.accept(ModItems.CHRISTMAS_SWEATER_BLUE);

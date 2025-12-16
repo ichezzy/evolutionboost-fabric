@@ -14,7 +14,7 @@ import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.item.TicketManager;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.reward.RewardManager;
-import com.ichezzy.evolutionboost.weather.EventWeatherManager;
+import com.ichezzy.evolutionboost.weather.ChristmasWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -50,7 +50,7 @@ public class EvolutionBoost implements ModInitializer {
         BoostHudSync.init();
 
         // ---- Event-Wetter (Christmas-Storm etc.) ----
-        EventWeatherManager.init();
+        ChristmasWeatherManager.init();
 
         // ---- Commands zentral registrieren (übersteht /reload) ----
         CommandRegistrationCallback.EVENT.register(

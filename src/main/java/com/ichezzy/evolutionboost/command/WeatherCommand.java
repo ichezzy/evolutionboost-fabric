@@ -1,7 +1,7 @@
 package com.ichezzy.evolutionboost.command;
 
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
-import com.ichezzy.evolutionboost.weather.EventWeatherManager;
+import com.ichezzy.evolutionboost.weather.ChristmasWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -14,38 +14,78 @@ public final class WeatherCommand {
     public static void register(CommandDispatcher<CommandSourceStack> d) {
 
         var subtree = Commands.literal("weather")
+                .requires(src -> EvolutionboostPermissions.check(
+                        src, "evolutionboost.weather.admin", 2, false
+                ))
 
-                // /eb weather christmas storm on|off
                 .then(Commands.literal("christmas")
+                        // /eb weather christmas storm on|off
                         .then(Commands.literal("storm")
-                                .requires(src -> EvolutionboostPermissions.check(
-                                        src,
-                                        "evolutionboost.weather.admin",
-                                        2,
-                                        false
-                                ))
                                 .then(Commands.literal("on").executes(ctx -> {
-                                    EventWeatherManager.startChristmasStorm(ctx.getSource().getServer());
+                                    ChristmasWeatherManager.startChristmasStorm(ctx.getSource().getServer());
                                     ctx.getSource().sendSuccess(
-                                            () -> Component.literal("[Weather] Christmas storm cycle STARTED in event:christmas.")
+                                            () -> Component.literal("[Weather] Christmas storm STARTED.")
                                                     .withStyle(ChatFormatting.AQUA),
                                             false
                                     );
                                     return 1;
                                 }))
                                 .then(Commands.literal("off").executes(ctx -> {
-                                    EventWeatherManager.stopChristmasStorm(ctx.getSource().getServer());
+                                    ChristmasWeatherManager.stopChristmasStorm(ctx.getSource().getServer());
                                     ctx.getSource().sendSuccess(
-                                            () -> Component.literal("[Weather] Christmas storm STOPPED and cleared in event:christmas.")
+                                            () -> Component.literal("[Weather] Christmas storm STOPPED.")
                                                     .withStyle(ChatFormatting.GRAY),
                                             false
                                     );
                                     return 1;
                                 }))
                         )
+
+                        // /eb weather christmas auto on|off
+                        .then(Commands.literal("auto")
+                                .then(Commands.literal("on").executes(ctx -> {
+                                    ChristmasWeatherManager.enableAutoStorm(ctx.getSource().getServer());
+                                    ctx.getSource().sendSuccess(
+                                            () -> Component.literal("[Weather] Auto storm cycle ENABLED.")
+                                                    .withStyle(ChatFormatting.GREEN),
+                                            false
+                                    );
+                                    return 1;
+                                }))
+                                .then(Commands.literal("off").executes(ctx -> {
+                                    ChristmasWeatherManager.disableAutoStorm(ctx.getSource().getServer());
+                                    ctx.getSource().sendSuccess(
+                                            () -> Component.literal("[Weather] Auto storm cycle DISABLED.")
+                                                    .withStyle(ChatFormatting.RED),
+                                            false
+                                    );
+                                    return 1;
+                                }))
+                        )
+
+                        // /eb weather christmas init - Setzt Basis-Boosts
+                        .then(Commands.literal("init").executes(ctx -> {
+                            ChristmasWeatherManager.initializeChristmasBoosts(ctx.getSource().getServer());
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal("[Weather] Christmas boosts initialized.")
+                                            .withStyle(ChatFormatting.GREEN),
+                                    false
+                            );
+                            return 1;
+                        }))
+
+                        // /eb weather christmas status
+                        .then(Commands.literal("status").executes(ctx -> {
+                            String status = ChristmasWeatherManager.getStatus();
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal("[Weather] " + status)
+                                            .withStyle(ChatFormatting.AQUA),
+                                    false
+                            );
+                            return 1;
+                        }))
                 );
 
-        // Unter /evolutionboost & /eb anhängen (wie bei Rewards/Boost/Event)
         d.register(Commands.literal("evolutionboost").then(subtree));
         d.register(Commands.literal("eb").then(subtree));
     }

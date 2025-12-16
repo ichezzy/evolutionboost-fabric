@@ -1,8 +1,10 @@
 package com.ichezzy.evolutionboost.item;
 
+import com.google.gson.*;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -16,14 +18,20 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Verwalten aktiver Teleport-Sessions (Ticket-basiert ODER manuell via /eventtp).
- *  Spawns werden in EvolutionBoostConfig (/config/evolutionboost/main.json) unter eventSpawns gespeichert. */
+/**
+ * Verwalten aktiver Teleport-Sessions (Ticket-basiert).
+ * Sessions werden persistiert und überleben Server-Restarts.
+ * Spawns werden in EvolutionBoostConfig gespeichert.
+ */
 public final class TicketManager {
     private TicketManager() {}
 
@@ -62,8 +70,8 @@ public final class TicketManager {
         public final double rx, ry, rz;
         public final float ryaw, rpitch;
         public final GameType previousMode;
-        public long ticksLeft;          // Countdown (bei Ticket) oder Long.MAX_VALUE (manuell)
-        public final boolean manual;    // true = /eventtp (kein Adventure, kein Countdown)
+        public long ticksLeft;          // Countdown (bei Ticket)
+        public final boolean manual;    // Legacy - nicht mehr verwendet für neue Sessions
 
         public Session(UUID id, Target t, ResourceKey<Level> retDim,
                        double rx, double ry, double rz, float yaw, float pitch, GameType prev,
@@ -80,26 +88,122 @@ public final class TicketManager {
     }
 
     private static final Map<UUID, Session> ACTIVE = new ConcurrentHashMap<>();
+    private static final Map<Target, BlockPos> SPAWNS = new ConcurrentHashMap<>();
+
+    // Pfad zur Session-Persistierung
+    private static Path getSessionFile() {
+        return FabricLoader.getInstance().getConfigDir()
+                .resolve(EvolutionBoost.MOD_ID)
+                .resolve("ticket_sessions.json");
+    }
+
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    /* ================= Session Persistierung ================= */
+
+    /**
+     * Speichert alle aktiven Sessions in eine JSON-Datei.
+     */
+    public static synchronized void saveSessions() {
+        if (ACTIVE.isEmpty()) {
+            // Keine Sessions -> Datei löschen falls vorhanden
+            try {
+                Files.deleteIfExists(getSessionFile());
+            } catch (IOException ignored) {}
+            return;
+        }
+
+        JsonObject root = new JsonObject();
+        JsonObject sessions = new JsonObject();
+
+        for (var entry : ACTIVE.entrySet()) {
+            Session s = entry.getValue();
+            JsonObject sObj = new JsonObject();
+            sObj.addProperty("target", s.target.name());
+            sObj.addProperty("returnDim", s.returnDim.location().toString());
+            sObj.addProperty("rx", s.rx);
+            sObj.addProperty("ry", s.ry);
+            sObj.addProperty("rz", s.rz);
+            sObj.addProperty("ryaw", s.ryaw);
+            sObj.addProperty("rpitch", s.rpitch);
+            sObj.addProperty("previousMode", s.previousMode.name());
+            sObj.addProperty("ticksLeft", s.ticksLeft);
+            sObj.addProperty("manual", s.manual);
+            sessions.add(entry.getKey().toString(), sObj);
+        }
+
+        root.add("sessions", sessions);
+
+        try {
+            Path file = getSessionFile();
+            Files.createDirectories(file.getParent());
+            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+                GSON.toJson(root, writer);
+            }
+            EvolutionBoost.LOGGER.debug("[TicketManager] Saved {} sessions to disk.", ACTIVE.size());
+        } catch (IOException e) {
+            EvolutionBoost.LOGGER.warn("[TicketManager] Failed to save sessions: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Lädt Sessions aus der JSON-Datei.
+     */
+    public static synchronized void loadSessions() {
+        Path file = getSessionFile();
+        if (!Files.exists(file)) {
+            return;
+        }
+
+        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+            JsonObject sessions = root.getAsJsonObject("sessions");
+
+            if (sessions == null) return;
+
+            int loaded = 0;
+            for (var entry : sessions.entrySet()) {
+                try {
+                    UUID uuid = UUID.fromString(entry.getKey());
+                    JsonObject sObj = entry.getValue().getAsJsonObject();
+
+                    Target target = Target.valueOf(sObj.get("target").getAsString());
+                    ResourceLocation dimLoc = ResourceLocation.parse(sObj.get("returnDim").getAsString());
+                    ResourceKey<Level> returnDim = ResourceKey.create(Registries.DIMENSION, dimLoc);
+
+                    double rx = sObj.get("rx").getAsDouble();
+                    double ry = sObj.get("ry").getAsDouble();
+                    double rz = sObj.get("rz").getAsDouble();
+                    float ryaw = sObj.get("ryaw").getAsFloat();
+                    float rpitch = sObj.get("rpitch").getAsFloat();
+                    GameType prevMode = GameType.valueOf(sObj.get("previousMode").getAsString());
+                    long ticksLeft = sObj.get("ticksLeft").getAsLong();
+                    boolean manual = sObj.has("manual") && sObj.get("manual").getAsBoolean();
+
+                    Session session = new Session(uuid, target, returnDim, rx, ry, rz, ryaw, rpitch, prevMode, ticksLeft, manual);
+                    ACTIVE.put(uuid, session);
+                    loaded++;
+                } catch (Exception e) {
+                    EvolutionBoost.LOGGER.warn("[TicketManager] Failed to load session {}: {}", entry.getKey(), e.getMessage());
+                }
+            }
+
+            EvolutionBoost.LOGGER.info("[TicketManager] Loaded {} sessions from disk.", loaded);
+        } catch (Exception e) {
+            EvolutionBoost.LOGGER.warn("[TicketManager] Failed to load sessions file: {}", e.getMessage());
+        }
+    }
 
     /* ================= Spawns aus EvolutionBoostConfig ================= */
 
-    private static final Map<Target, BlockPos> SPAWNS = new ConcurrentHashMap<>();
-
-    /** Standard-Spawn, falls nichts konfiguriert ist. */
     private static BlockPos defaultSpawn(Target t) {
-        // Standard: (0,23,0) für alle
         return new BlockPos(0, 23, 0);
     }
 
-    /** Convenience: aktuelle Config-Instanz. */
     private static EvolutionBoostConfig cfg() {
         return EvolutionBoostConfig.get();
     }
 
-    /**
-     * Spawns aus EvolutionBoostConfig in den RAM-Cache laden.
-     * Keys: "halloween", "safari", "christmas". Fällt auf Defaults zurück.
-     */
     private static void loadSpawnsFromConfig() {
         SPAWNS.clear();
         for (Target t : Target.values()) {
@@ -112,20 +216,12 @@ public final class TicketManager {
         }
     }
 
-    /**
-     * Einen Spawn in die Config schreiben (inkl. Dimension zum Ziel) und speichern.
-     */
     private static void saveSpawnToConfig(Target t, BlockPos pos) {
-        String dimStr = t.dim.location().toString(); // z.B. "event:halloween"
+        String dimStr = t.dim.location().toString();
         cfg().putSpawn(t.key(), new EvolutionBoostConfig.Spawn(dimStr, pos.getX(), pos.getY(), pos.getZ()));
         EvolutionBoostConfig.save();
     }
 
-    /**
-     * Migration: alte /config/evolutionboost/event_spawns.json (falls vorhanden)
-     * nach main.json übernehmen und Legacy-Datei löschen.
-     * (christmas gibt es dort naturgemäß nicht – ist ok)
-     */
     private static void migrateLegacyEventSpawnsIfPresent() {
         Path legacyFile = FabricLoader.getInstance()
                 .getConfigDir().resolve(EvolutionBoost.MOD_ID).resolve("event_spawns.json");
@@ -148,9 +244,9 @@ public final class TicketManager {
             EvolutionBoostConfig.save();
 
             try { Files.deleteIfExists(legacyFile); } catch (IOException ignored) {}
-            EvolutionBoost.LOGGER.info("[eventtp] Migrated legacy event_spawns.json -> main.json and removed legacy file.");
+            EvolutionBoost.LOGGER.info("[TicketManager] Migrated legacy event_spawns.json -> main.json and removed legacy file.");
         } catch (Exception e) {
-            EvolutionBoost.LOGGER.warn("[eventtp] failed to migrate legacy event_spawns.json: {}", e.getMessage());
+            EvolutionBoost.LOGGER.warn("[TicketManager] Failed to migrate legacy event_spawns.json: {}", e.getMessage());
         }
     }
 
@@ -182,23 +278,30 @@ public final class TicketManager {
     /* ================= Public API ================= */
 
     public static void init(MinecraftServer server) {
-        // 1) Legacy-Migration (falls alte Datei vorhanden)
+        // 1) Legacy-Migration
         migrateLegacyEventSpawnsIfPresent();
-        // 2) Spawns aus Haupt-Config laden
+        // 2) Spawns aus Config laden
         loadSpawnsFromConfig();
+        // 3) Sessions aus Datei laden
+        loadSessions();
 
         // Tick-Loop für Sessions
         ServerTickEvents.END_SERVER_TICK.register(s -> {
             Iterator<Session> it = ACTIVE.values().iterator();
+            boolean changed = false;
+
             while (it.hasNext()) {
                 Session sess = it.next();
                 ServerPlayer p = s.getPlayerList().getPlayer(sess.uuid);
+
+                // Spieler offline -> Session bleibt erhalten, Timer pausiert
                 if (p == null) continue;
 
                 // Falls Spieler Dimension verlassen hat -> sofort resetten
                 if (!p.serverLevel().dimension().equals(sess.target.dim)) {
                     restore(s, p, sess);
                     it.remove();
+                    changed = true;
                     continue;
                 }
 
@@ -207,6 +310,7 @@ public final class TicketManager {
                     if (--sess.ticksLeft <= 0) {
                         restore(s, p, sess);
                         it.remove();
+                        changed = true;
                     } else {
                         // Safety: während Ticket-Session Adventure erzwingen
                         if (p.gameMode.getGameModeForPlayer() != GameType.ADVENTURE) {
@@ -223,6 +327,17 @@ public final class TicketManager {
                     }
                 }
             }
+
+            // Sessions speichern wenn sich etwas geändert hat
+            if (changed) {
+                saveSessions();
+            }
+        });
+
+        // Bei Server-Stop Sessions speichern
+        ServerLifecycleEvents.SERVER_STOPPING.register(srv -> {
+            saveSessions();
+            EvolutionBoost.LOGGER.info("[TicketManager] Saved sessions on server stop.");
         });
     }
 
@@ -232,13 +347,12 @@ public final class TicketManager {
         return SPAWNS.getOrDefault(t, defaultSpawn(t));
     }
 
-    /** Persistiert jetzt in /config/evolutionboost/main.json -> eventSpawns. */
     public static void setSpawn(Target t, BlockPos pos) {
         SPAWNS.put(t, pos.immutable());
         saveSpawnToConfig(t, pos.immutable());
     }
 
-    /** Ticket: Countdown + Adventure + Auto-Return. */
+    /** Ticket: Countdown + Adventure + Auto-Return. Sessions werden persistiert. */
     public static boolean startTicket(ServerPlayer p, Target target, long ticks) {
         if (hasSession(p.getUUID())) return false;
 
@@ -255,33 +369,16 @@ public final class TicketManager {
         p.setGameMode(GameType.ADVENTURE);
 
         ACTIVE.put(p.getUUID(), new Session(p.getUUID(), target, retDim, rx, ry, rz, yaw, pitch, prev, ticks, false));
+        saveSessions(); // Sofort speichern
         return true;
     }
 
-    /** Manuell: kein Adventure, kein Countdown. Rückkehr via /eventtp return. */
-    public static boolean startManual(ServerPlayer p, Target target) {
-        if (hasSession(p.getUUID())) return false;
-
-        var retDim = p.serverLevel().dimension();
-        double rx = p.getX(), ry = p.getY(), rz = p.getZ();
-        float yaw = p.getYRot(), pitch = p.getXRot();
-        GameType prev = p.gameMode.getGameModeForPlayer();
-
-        ServerLevel dst = p.server.getLevel(target.dim);
-        if (dst == null) return false;
-
-        BlockPos tp = getSpawn(target);
-        p.teleportTo(dst, tp.getX() + 0.5, tp.getY(), tp.getZ() + 0.5, yaw, pitch);
-        // kein Adventure, Session ohne Ablauf
-        ACTIVE.put(p.getUUID(), new Session(p.getUUID(), target, retDim, rx, ry, rz, yaw, pitch, prev, Long.MAX_VALUE, true));
-        return true;
-    }
-
-    /** Für /eventtp return (manuell) oder Force-Return. */
+    /** Für Force-Return (z.B. wenn Spieler die Dimension anders verlässt). */
     public static boolean returnNow(ServerPlayer p) {
         Session sess = ACTIVE.remove(p.getUUID());
         if (sess == null) return false;
         restore(p.server, p, sess);
+        saveSessions(); // Sofort speichern
         return true;
     }
 

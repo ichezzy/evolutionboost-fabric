@@ -1,14 +1,17 @@
 package com.ichezzy.evolutionboost.command;
 
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.item.TicketManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 public final class EventCommand {
     private EventCommand(){}
@@ -18,44 +21,64 @@ public final class EventCommand {
                 // Nur OP oder Spieler mit evolutionboost.event
                 .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.event", 2, false))
 
+                // /eb event tp <dimension> - Einfacher Teleport zum Event-Spawn (keine Session)
                 .then(Commands.literal("tp")
                         .then(Commands.argument("dimension", DimensionArgument.dimension())
                                 .executes(ctx -> {
                                     ServerPlayer p = ctx.getSource().getPlayerOrException();
                                     ServerLevel dst = DimensionArgument.getDimension(ctx, "dimension");
+
+                                    // Versuche Target aus der Dimension zu ermitteln
                                     TicketManager.Target tgt = TicketManager.Target.from(dst.dimension().location().getPath());
-                                    if (tgt == null) {
-                                        // erlaub nur event:* Ziele
+
+                                    BlockPos spawnPos;
+                                    if (tgt != null) {
+                                        // Bekanntes Event-Ziel -> nutze konfigurierten Spawn
+                                        spawnPos = TicketManager.getSpawn(tgt);
+                                    } else {
+                                        // Unbekannte Dimension -> prüfe ob event:* Namespace
                                         if (!dst.dimension().location().getNamespace().equals("event")) {
                                             ctx.getSource().sendFailure(Component.literal("[EventTP] Only 'event:*' dimensions are allowed."));
                                             return 0;
                                         }
-                                        // Manuell: kein Timer, kein Mode-Wechsel
-                                        var pos = TicketManager.getSpawn(TicketManager.Target.SAFARI);
-                                        p.teleportTo(dst, pos.getX() + .5, pos.getY(), pos.getZ() + .5, p.getYRot(), p.getXRot());
-                                        ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported."), false);
-                                        return 1;
+                                        // Fallback: versuche Spawn aus Config zu laden oder nutze Default
+                                        String dimPath = dst.dimension().location().getPath();
+                                        EvolutionBoostConfig.Spawn configSpawn = EvolutionBoostConfig.get().getSpawn(dimPath);
+                                        if (configSpawn != null) {
+                                            spawnPos = configSpawn.toBlockPos();
+                                        } else {
+                                            // Default Spawn für unbekannte Event-Dimensionen
+                                            spawnPos = new BlockPos(0, 80, 0);
+                                        }
                                     }
-                                    boolean ok = TicketManager.startManual(p, tgt);
-                                    if (!ok) {
-                                        ctx.getSource().sendFailure(Component.literal("[EventTP] Already in a session – use /evolutionboost event return first."));
-                                        return 0;
-                                    }
-                                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to " + tgt.key() + "."), false);
+
+                                    // Einfacher Teleport - KEINE Session, KEIN Speichern der Rückkehr-Position
+                                    p.teleportTo(dst, spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, p.getYRot(), p.getXRot());
+
+                                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to " + dst.dimension().location() + "."), false);
                                     return 1;
                                 })
                         )
                 )
+
+                // /eb event return - Teleportiert zum Overworld-Spawn (nicht zur gespeicherten Position)
                 .then(Commands.literal("return").executes(ctx -> {
                     ServerPlayer p = ctx.getSource().getPlayerOrException();
-                    boolean ok = TicketManager.returnNow(p);
-                    if (!ok) {
-                        ctx.getSource().sendFailure(Component.literal("[EventTP] No active manual session."));
+                    ServerLevel overworld = p.server.getLevel(Level.OVERWORLD);
+
+                    if (overworld == null) {
+                        ctx.getSource().sendFailure(Component.literal("[EventTP] Could not find Overworld."));
                         return 0;
                     }
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Returned."), false);
+
+                    // Teleport zum Overworld-Spawnpunkt
+                    BlockPos spawnPos = overworld.getSharedSpawnPos();
+                    p.teleportTo(overworld, spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, p.getYRot(), p.getXRot());
+
+                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Returned to Overworld spawn."), false);
                     return 1;
                 }))
+
                 // setspawn: /eb event setspawn <halloween|safari|christmas>
                 .then(Commands.literal("setspawn")
                         .then(Commands.literal("halloween").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.HALLOWEEN)))

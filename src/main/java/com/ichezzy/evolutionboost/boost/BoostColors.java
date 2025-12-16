@@ -11,7 +11,7 @@ public final class BoostColors {
         return switch (type) {
             case SHINY -> BossEvent.BossBarColor.YELLOW;
             case XP    -> BossEvent.BossBarColor.GREEN;
-            case DROP  -> BossEvent.BossBarColor.BLUE;
+            case EV    -> BossEvent.BossBarColor.BLUE;
             case IV    -> BossEvent.BossBarColor.PURPLE;
         };
     }
@@ -21,7 +21,7 @@ public final class BoostColors {
         return switch (type) {
             case SHINY -> ChatFormatting.GOLD;
             case XP    -> ChatFormatting.GREEN;
-            case DROP  -> ChatFormatting.AQUA;
+            case EV    -> ChatFormatting.AQUA;
             case IV    -> ChatFormatting.DARK_PURPLE;
         };
     }
