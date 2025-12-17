@@ -60,6 +60,14 @@
   "item.evolutionboost.spirit_dew_shards": "Spirit Dew Shards",
   "item.evolutionboost.wind_up_key": "Wind Up Key",
 
+  "item.evolutionboost.raid_key": "Raid Key",
+  "item.evolutionboost.raid_key_gold": "Raid Key (Gold)",
+  "item.evolutionboost.raid_key_diamond": "Raid Key (Diamond)",
+  "item.evolutionboost.raid_pass": "Raid Pass",
+  "item.evolutionboost.raid_pass_gold": "Raid Pass (Gold)",
+  "item.evolutionboost.raid_pass_diamond": "Raid Pass (Diamond)",
+  "item.evolutionboost.grim_reaper_raid_key": "Grim Reaper Raid Key",
+
   "tooltip.evolutionboost.coin_bronze": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
   "tooltip.evolutionboost.coin_silver": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
   "tooltip.evolutionboost.coin_gold": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
@@ -104,10 +112,12 @@
   "tooltip.evolutionboost.cursed_coal_heart": "This was once the heart of the Ice Queen. The curse inflicted by Krampus seems to amplify hatred and grudge. (Quest Item)",
   "tooltip.evolutionboost.cursed_gift_black": "A cursed gift colored in black. (Quest Item)",
   "tooltip.evolutionboost.cursed_gift_purple": "A cursed gift colored in purple. (Quest Item)",
+  "tooltip.evolutionboost.frozen_yeti_toy": "A teddy that was long lost in the snowy fields of Crystal Winter. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.gift_blue": "A blue gift. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.gift_green": "A green gift. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.gift_red": "A red gift. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.gingerbread": "Gingerbread baked by Blizzy's Blissful Bakery. Use it as en exchangeable currency.",
+  "tooltip.evolutionboost.grinch_hat": "The Grinch wore this hat when he tried to ruin Christmas again. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.holy_spark": "A spark of hope for the Christmas spirit. (Quest Item)",
   "tooltip.evolutionboost.ice_crown": "An icy crown belonging to the princess of Frostglow. It seems to be made for a very specific Pokémon.",
   "tooltip.evolutionboost.ice_heart": "Now that the curse is lifted, this heart might be capable of stopping the Ice Queen and her wrath! (Quest Item)",
@@ -117,5 +127,13 @@
   "tooltip.evolutionboost.red_nose": "The red nose of Rudolph. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.spirit_dew": "This dew glows in polar lights. It has the potential of summoning a mighty hound.",
   "tooltip.evolutionboost.spirit_dew_shards": "Remnants of a legendary dew. It is said that once its true potential is unlocked, it can summon a mighty hound.",
-  "tooltip.evolutionboost.wind_up_key": "A wind up key that is used for toys. Perhaps a special Pokémon can use it?"
+  "tooltip.evolutionboost.wind_up_key": "A wind up key that is used for toys. Perhaps a special Pokémon can use it?",
+
+  "tooltip.evolutionboost.raid_key": "Raid Key",
+  "tooltip.evolutionboost.raid_key_gold": "Raid Key (Gold)",
+  "tooltip.evolutionboost.raid_key_diamond": "Raid Key (Diamond)",
+  "tooltip.evolutionboost.raid_pass": "Raid Pass",
+  "tooltip.evolutionboost.raid_pass_gold": "Raid Pass (Gold)",
+  "tooltip.evolutionboost.raid_pass_diamond": "Raid Pass (Diamond)",
+  "tooltip.evolutionboost.grim_reaper_raid_key": "Grim Reaper Raid Key"
 }

@@ -73,7 +73,7 @@ public final class EvolutionBoostClient implements ClientModInitializer {
 
             // Position: links, bei 1/4 der Bildschirmhöhe (unterhalb Cobblemon Party)
             int screenHeight = mc.getWindow().getGuiScaledHeight();
-            int x = 50;
+            int x = 16;
             int y = 50;
 
             for (BoostType type : BoostType.values()) {

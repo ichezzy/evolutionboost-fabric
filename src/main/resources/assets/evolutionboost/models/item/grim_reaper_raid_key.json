@@ -1,0 +1,1 @@
+{ "parent": "minecraft:item/generated", "textures": { "layer0": "evolutionboost:item/grim_reaper_raid_key" } }

@@ -58,15 +58,15 @@ public final class ModItemGroup {
                             output.accept(ModItems.CURSED_COAL_HEART);
                             output.accept(ModItems.CURSED_GIFT_BLACK);
                             output.accept(ModItems.CURSED_GIFT_PURPLE);
+                            output.accept(ModItems.FROZEN_YETI_TOY);
                             output.accept(ModItems.GIFT_BLUE);
                             output.accept(ModItems.GIFT_GREEN);
                             output.accept(ModItems.GIFT_RED);
                             output.accept(ModItems.GINGERBREAD);
+                            output.accept(ModItems.GRINCH_HAT);
                             output.accept(ModItems.HOLY_SPARK);
                             output.accept(ModItems.ICE_CROWN);
                             output.accept(ModItems.ICE_HEART);
-                            output.accept(ModItems.ICE_QUEEN_RAID_KEY);
-                            output.accept(ModItems.KRAMPUS_RAID_KEY);
                             output.accept(ModItems.LOST_TOY);
                             output.accept(ModItems.RED_NOSE);
                             output.accept(ModItems.SPIRIT_DEW);
@@ -82,6 +82,17 @@ public final class ModItemGroup {
                             output.accept(ModItems.EVENT_VOUCHER_SHINY);
                             output.accept(ModItems.EVENT_VOUCHER_DROP);
                             output.accept(ModItems.EVENT_VOUCHER_EV);
+
+                            // Raid Keys & Passes
+                            output.accept(ModItems.RAID_KEY);
+                            output.accept(ModItems.RAID_KEY_T6);
+                            output.accept(ModItems.RAID_KEY_T7);
+                            output.accept(ModItems.RAID_PASS);
+                            output.accept(ModItems.RAID_PASS_T6);
+                            output.accept(ModItems.RAID_PASS_T7);
+                            output.accept(ModItems.GRIM_REAPER_RAID_KEY);
+                            output.accept(ModItems.ICE_QUEEN_RAID_KEY);
+                            output.accept(ModItems.KRAMPUS_RAID_KEY);
                         })
                         .build()
         );
