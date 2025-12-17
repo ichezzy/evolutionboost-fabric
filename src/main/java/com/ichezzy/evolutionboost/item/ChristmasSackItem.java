@@ -112,7 +112,7 @@ public class ChristmasSackItem extends Item {
         add(pool, () -> stackOf("cobblemon", "exp_candy_m", r(rand, 1, 2)), 8);
 
         // SimpleHats Christmas
-        add(pool, () -> stackOf("simplehats", "hatbag_christmas", 1), 3);
+        add(pool, () -> stackOf("simplehats", "hatbag_festive", 1), 3);
 
         return pool;
     }

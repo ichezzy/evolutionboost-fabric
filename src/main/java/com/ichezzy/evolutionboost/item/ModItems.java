@@ -183,8 +183,7 @@ public final class ModItems {
 
     public static final Item CHRISTMAS_LOOT_SACK = register(
             "christmas_loot_sack",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
-                    "tooltip.evolutionboost.christmas_loot_sack")
+            new ChristmasSackItem(new Item.Properties().stacksTo(64).rarity(Rarity.RARE))
     );
 
     public static final Item CHRISTMAS_SWEATER_BLUE = register(
