@@ -33,10 +33,9 @@ import java.util.function.Supplier;
  */
 public class ChristmasSackItem extends Item {
 
-    // Extra-Roll-Wahrscheinlichkeiten (nach 1 Common-Roll)
-    private static final double EXTRA_UNCOMMON = 0.30;
-    private static final double EXTRA_RARE     = 0.10;
-    private static final double EXTRA_EPIC     = 0.02;
+    private static final double EXTRA_UNCOMMON = 0.35;
+    private static final double EXTRA_RARE     = 0.15;
+    private static final double EXTRA_EPIC     = 0.05;
 
     public ChristmasSackItem(Properties props) { super(props); }
 
@@ -54,14 +53,14 @@ public class ChristmasSackItem extends Item {
             // optionaler Extra-Roll je nach Wahrscheinlichkeit
             double r = rand.nextDouble();
             if (r < EXTRA_EPIC) {
-                giveFromPool(sp, rand, buildEpicPool());
+                giveFromPool(sp, rand, buildEpicPool(rand));
             } else if (r < EXTRA_EPIC + EXTRA_RARE) {
                 giveFromPool(sp, rand, buildRarePool(rand));
             } else if (r < EXTRA_EPIC + EXTRA_RARE + EXTRA_UNCOMMON) {
                 giveFromPool(sp, rand, buildUncommonPool(rand));
             }
 
-            // Festlicher Sound (Glocken + Geschenk-Sound)
+            // Festlicher Sound
             sl.playSound(null, sp.getX(), sp.getY(), sp.getZ(),
                     SoundEvents.BUNDLE_DROP_CONTENTS, SoundSource.PLAYERS, 1.0f, 1.2f);
             sl.playSound(null, sp.getX(), sp.getY(), sp.getZ(),
@@ -75,123 +74,106 @@ public class ChristmasSackItem extends Item {
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
     }
 
-    /* ----------------- Pools ----------------- */
-
-    /**
-     * COMMON Pool - Basis-Loot (garantiert 1x)
-     * Holy Spark, Gingerbread, Christmas Berry, Potions
-     */
+    /* ======================= COMMON POOL ======================= */
     private static List<Weighted> buildCommonPool(RandomSource rand) {
         List<Weighted> pool = new ArrayList<>();
 
-        // Weihnachts-Währung (häufig)
-        add(pool, () -> new ItemStack(ModItems.HOLY_SPARK, r(rand, 1, 5)), 35);
+        // EvolutionBoost Items (Common)
         add(pool, () -> new ItemStack(ModItems.GINGERBREAD, r(rand, 1, 3)), 25);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BERRY, r(rand, 1, 3)), 20);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_CANDY_BLUE, r(rand, 2, 5)), 25);
+        add(pool, () -> new ItemStack(ModItems.HOLY_SPARK, r(rand, 1, 5)), 25);
 
-        // Basis-Items
-        add(pool, () -> new ItemStack(Items.SNOWBALL, r(rand, 4, 16)), 10);
-        add(pool, () -> stackOf("cobblemon", "potion", r(rand, 1, 3)), 10);
+        // Minecraft Items (Common)
+        add(pool, () -> new ItemStack(Items.IRON_INGOT, r(rand, 2, 5)), 12);
+        add(pool, () -> new ItemStack(Items.COPPER_INGOT, r(rand, 3, 8)), 8);
+
+        // Cobblemon Items (Common)
+        add(pool, () -> stackOf("cobblemon", "hyper_potion", r(rand, 1, 2)), 5);
 
         return pool;
     }
 
-    /**
-     * UNCOMMON Pool - Geschenke, Cursed Items, Potions
-     */
+    /* ======================= UNCOMMON POOL ======================= */
     private static List<Weighted> buildUncommonPool(RandomSource rand) {
         List<Weighted> pool = new ArrayList<>();
 
-        // Geschenke
-        add(pool, () -> new ItemStack(ModItems.GIFT_BLUE), 12);
-        add(pool, () -> new ItemStack(ModItems.GIFT_GREEN), 12);
-        add(pool, () -> new ItemStack(ModItems.GIFT_RED), 12);
+        // EvolutionBoost Items (Uncommon)
+        add(pool, () -> new ItemStack(ModItems.EVOLUTION_COIN_BRONZE, r(rand, 1, 2)), 15);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_CANDY, r(rand, 1, 3)), 15);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_CANDY_PURPLE, r(rand, 1, 3)), 15);
 
-        // Cursed Items (für Krampus-Theme)
-        add(pool, () -> new ItemStack(ModItems.CURSED_COAL, r(rand, 1, 2)), 10);
-        add(pool, () -> new ItemStack(ModItems.CURSED_GIFT_BLACK), 8);
-        add(pool, () -> new ItemStack(ModItems.CURSED_GIFT_PURPLE), 8);
+        // Minecraft Items (Uncommon)
+        add(pool, () -> new ItemStack(Items.GOLD_INGOT, r(rand, 1, 3)), 12);
 
-        // Cobblemon Items
-        add(pool, () -> stackOf("cobblemon", "hyper_potion", r(rand, 1, 2)), 15);
-        add(pool, () -> stackOf("cobblemon", "revive", r(rand, 1, 2)), 10);
-        add(pool, () -> stackOf("cobblemon", "full_heal", r(rand, 1, 2)), 8);
+        // Cobblemon Items (Uncommon)
+        add(pool, () -> stackOf("cobblemon", "revive", r(rand, 1, 2)), 12);
+        add(pool, () -> stackOf("cobblemon", "full_heal", r(rand, 1, 2)), 10);
+        add(pool, () -> stackOf("cobblemon", "exp_candy_s", r(rand, 1, 3)), 10);
+        add(pool, () -> stackOf("cobblemon", "exp_candy_m", r(rand, 1, 2)), 8);
 
         // SimpleHats Christmas
-        add(pool, () -> stackOf("simplehats", "hatbag_christmas", 1), 5);
+        add(pool, () -> stackOf("simplehats", "hatbag_christmas", 1), 3);
 
         return pool;
     }
 
-    /**
-     * RARE Pool - Sweater, Ice Heart, Spirit Dew Shards, Vitamins
-     */
+    /* ======================= RARE POOL ======================= */
     private static List<Weighted> buildRarePool(RandomSource rand) {
         List<Weighted> pool = new ArrayList<>();
 
-        // Christmas Kleidung
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_SWEATER_BLUE), 10);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_SWEATER_RED), 10);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_TWIG), 8);
-
-        // Seltene Christmas Items
-        add(pool, () -> new ItemStack(ModItems.ICE_HEART), 8);
+        // EvolutionBoost Items (Rare)
+        add(pool, () -> new ItemStack(ModItems.EVOLUTION_COIN_SILVER), 8);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_CANDY_PINK, r(rand, 1, 2)), 10);
         add(pool, () -> new ItemStack(ModItems.SPIRIT_DEW_SHARDS), 8);
-        add(pool, () -> new ItemStack(ModItems.CURSED_COAL_HEART), 6);
+        add(pool, () -> new ItemStack(ModItems.RED_NOSE), 6);
+        add(pool, () -> new ItemStack(ModItems.GIFT_GREEN), 8);
 
-        // Wertvolle Vanilla Items
+        // Minecraft Items (Rare)
         add(pool, () -> new ItemStack(Items.DIAMOND, r(rand, 1, 2)), 8);
-        add(pool, () -> new ItemStack(Items.EMERALD, r(rand, 2, 4)), 10);
-        add(pool, () -> new ItemStack(ModItems.EVOLUTION_COIN_BRONZE), 6);
 
-        // Cobblemon Vitamins
+        // Cobblemon Items (Rare)
+        add(pool, () -> stackOf("cobblemon", "max_potion", 1), 6);
+        add(pool, () -> stackOf("cobblemon", "max_ether", 1), 6);
+        add(pool, () -> stackOf("cobblemon", "max_elixir", 1), 6);
+        add(pool, () -> stackOf("cobblemon", "exp_candy_l", r(rand, 1, 2)), 6);
+
+        // Cobblemon Vitamins (Rare)
         add(pool, () -> stackOf("cobblemon", "protein", 1), 4);
         add(pool, () -> stackOf("cobblemon", "calcium", 1), 4);
         add(pool, () -> stackOf("cobblemon", "iron", 1), 4);
         add(pool, () -> stackOf("cobblemon", "carbos", 1), 4);
         add(pool, () -> stackOf("cobblemon", "hp_up", 1), 4);
         add(pool, () -> stackOf("cobblemon", "zinc", 1), 4);
-        add(pool, () -> stackOf("cobblemon", "pp_up", 1), 4);
 
         return pool;
     }
 
-    /**
-     * EPIC Pool - Beste Items, Raid Keys, Cosmetics
-     */
-    private static List<Weighted> buildEpicPool() {
+    /* ======================= EPIC POOL ======================= */
+    private static List<Weighted> buildEpicPool(RandomSource rand) {
         List<Weighted> pool = new ArrayList<>();
 
-        // Christmas Cosmetics (sehr selten)
-        add(pool, () -> new ItemStack(ModItems.CANDY_CANE), 8);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_HAT), 6);
-        add(pool, () -> new ItemStack(ModItems.RED_NOSE), 5);
-        add(pool, () -> new ItemStack(ModItems.ICE_CROWN), 3);
+        // EvolutionBoost Items (Epic)
+        add(pool, () -> new ItemStack(ModItems.EVOLUTION_COIN_GOLD), 6);
+        add(pool, () -> new ItemStack(ModItems.GRINCH_HAT), 5);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_SWEATER_RED), 6);
+        add(pool, () -> new ItemStack(ModItems.FROZEN_YETI_TOY), 5);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BALL_GREEN), 6);
+        add(pool, () -> new ItemStack(ModItems.EVENT_VOUCHER_BLANK), 4);
 
-        // Christmas Balls
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BALL_BLUE), 8);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BALL_GREEN), 8);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BALL_RED), 8);
+        // Minecraft Items (Epic)
+        add(pool, () -> new ItemStack(Items.NETHERITE_SCRAP, r(rand, 1, 2)), 5);
 
-        // Legendäre Items
-        add(pool, () -> new ItemStack(ModItems.SPIRIT_DEW), 3);
-        add(pool, () -> new ItemStack(ModItems.LOST_TOY), 5);
-        add(pool, () -> new ItemStack(ModItems.WIND_UP_KEY), 5);
-
-        // Wertvolle Vanilla/Mod Items
-        add(pool, () -> new ItemStack(Items.NETHERITE_INGOT), 2);
-        add(pool, () -> new ItemStack(ModItems.EVOLUTION_COIN_SILVER), 4);
-
-        // Cobblemon Best Items
-        add(pool, () -> stackOf("cobblemon", "max_revive", 1), 5);
-        add(pool, () -> stackOf("cobblemon", "full_restore", 1), 5);
-        add(pool, () -> stackOf("cobblemon", "pp_max", 1), 4);
-        add(pool, () -> stackOf("cobblemon", "rare_candy", 1), 6);
+        // Cobblemon Items (Epic)
+        add(pool, () -> stackOf("cobblemon", "max_revive", 1), 8);
+        add(pool, () -> stackOf("cobblemon", "full_restore", 1), 8);
+        add(pool, () -> stackOf("cobblemon", "pp_max", 1), 5);
+        add(pool, () -> stackOf("cobblemon", "exp_candy_xl", r(rand, 1, 2)), 6);
+        add(pool, () -> stackOf("cobblemon", "rare_candy", 1), 4);
 
         return pool;
     }
 
-    /* --------------- Ziehen & Helpers --------------- */
+    /* ======================= HELPERS ======================= */
 
     private static void giveFromPool(ServerPlayer sp, RandomSource rand, List<Weighted> pool) {
         ItemStack drop = pickWeighted(pool, rand);

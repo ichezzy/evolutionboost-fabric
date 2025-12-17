@@ -44,11 +44,15 @@ public final class ModItemGroup {
 
                             // Christmas
                             output.accept(ModItems.CANDY_CANE);
+                            output.accept(ModItems.CANDY_CANE_GREEN);
                             output.accept(ModItems.CHRISTMAS_BALL_BLUE);
                             output.accept(ModItems.CHRISTMAS_BALL_GREEN);
                             output.accept(ModItems.CHRISTMAS_BALL_RED);
                             output.accept(ModItems.CHRISTMAS_BERRY);
                             output.accept(ModItems.CHRISTMAS_CANDY);
+                            output.accept(ModItems.CHRISTMAS_CANDY_BLUE);
+                            output.accept(ModItems.CHRISTMAS_CANDY_PINK);
+                            output.accept(ModItems.CHRISTMAS_CANDY_PURPLE);
                             output.accept(ModItems.CHRISTMAS_HAT);
                             output.accept(ModItems.CHRISTMAS_LOOT_SACK);
                             output.accept(ModItems.CHRISTMAS_SWEATER_BLUE);

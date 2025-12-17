@@ -121,6 +121,12 @@ public final class ModItems {
                     "tooltip.evolutionboost.candy_cane")
     );
 
+    public static final Item CANDY_CANE_GREEN = register(
+            "candy_cane_green",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.candy_cane_green")
+    );
+
     public static final Item CHRISTMAS_BALL_BLUE = register(
             "christmas_ball_blue",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
@@ -147,8 +153,26 @@ public final class ModItems {
 
     public static final Item CHRISTMAS_CANDY = register(
             "christmas_candy",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.christmas_candy")
+    );
+
+    public static final Item CHRISTMAS_CANDY_BLUE = register(
+            "christmas_candy_blue",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.COMMON),
+                    "tooltip.evolutionboost.christmas_candy_blue")
+    );
+
+    public static final Item CHRISTMAS_CANDY_PINK = register(
+            "christmas_candy_pink",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.christmas_candy_pink")
+    );
+
+    public static final Item CHRISTMAS_CANDY_PURPLE = register(
+            "christmas_candy_purple",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+                    "tooltip.evolutionboost.christmas_candy_purple")
     );
 
     public static final Item CHRISTMAS_HAT = register(
