@@ -52,21 +52,11 @@
   "item.evolutionboost.holy_spark": "Holy Spark",
   "item.evolutionboost.ice_crown": "Ice Crown",
   "item.evolutionboost.ice_heart": "Ice Heart",
-  "item.evolutionboost.ice_queen_raid_key": "Ice Queen Raid Key",
-  "item.evolutionboost.krampus_raid_key": "Krampus Raid Key",
   "item.evolutionboost.lost_toy": "Lost Toy",
   "item.evolutionboost.red_nose": "Rudolph's Red Nose",
   "item.evolutionboost.spirit_dew": "Spirit Dew",
   "item.evolutionboost.spirit_dew_shards": "Spirit Dew Shards",
   "item.evolutionboost.wind_up_key": "Wind Up Key",
-
-  "item.evolutionboost.raid_key": "Raid Key",
-  "item.evolutionboost.raid_key_gold": "Raid Key (Gold)",
-  "item.evolutionboost.raid_key_diamond": "Raid Key (Diamond)",
-  "item.evolutionboost.raid_pass": "Raid Pass",
-  "item.evolutionboost.raid_pass_gold": "Raid Pass (Gold)",
-  "item.evolutionboost.raid_pass_diamond": "Raid Pass (Diamond)",
-  "item.evolutionboost.grim_reaper_raid_key": "Grim Reaper Raid Key",
 
   "tooltip.evolutionboost.coin_bronze": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
   "tooltip.evolutionboost.coin_silver": "Exclusive Cobbled Evolution Currency. Exchange it for special items at NPCs.",
@@ -121,19 +111,9 @@
   "tooltip.evolutionboost.holy_spark": "A spark of hope for the Christmas spirit. (Quest Item)",
   "tooltip.evolutionboost.ice_crown": "An icy crown belonging to the princess of Frostglow. It seems to be made for a very specific Pokémon.",
   "tooltip.evolutionboost.ice_heart": "Now that the curse is lifted, this heart might be capable of stopping the Ice Queen and her wrath! (Quest Item)",
-  "tooltip.evolutionboost.ice_queen_raid_key": "A key that emits a freezing aura. Can be used to open the Ice Queen raid.",
-  "tooltip.evolutionboost.krampus_raid_key": "A key that emits a sinister aura. Can be used to open the Ice Queen raid.",
   "tooltip.evolutionboost.lost_toy": "A toy that the Yeti lost. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.red_nose": "The red nose of Rudolph. Perhaps a special Pokémon can use it?",
   "tooltip.evolutionboost.spirit_dew": "This dew glows in polar lights. It has the potential of summoning a mighty hound.",
   "tooltip.evolutionboost.spirit_dew_shards": "Remnants of a legendary dew. It is said that once its true potential is unlocked, it can summon a mighty hound.",
-  "tooltip.evolutionboost.wind_up_key": "A wind up key that is used for toys. Perhaps a special Pokémon can use it?",
-
-  "tooltip.evolutionboost.raid_key": "Raid Key",
-  "tooltip.evolutionboost.raid_key_gold": "Raid Key (Gold)",
-  "tooltip.evolutionboost.raid_key_diamond": "Raid Key (Diamond)",
-  "tooltip.evolutionboost.raid_pass": "Raid Pass",
-  "tooltip.evolutionboost.raid_pass_gold": "Raid Pass (Gold)",
-  "tooltip.evolutionboost.raid_pass_diamond": "Raid Pass (Diamond)",
-  "tooltip.evolutionboost.grim_reaper_raid_key": "Grim Reaper Raid Key"
+  "tooltip.evolutionboost.wind_up_key": "A wind up key that is used for toys. Perhaps a special Pokémon can use it?"
 }

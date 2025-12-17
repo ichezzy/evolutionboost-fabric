@@ -259,18 +259,6 @@ public final class ModItems {
                     "tooltip.evolutionboost.ice_heart")
     );
 
-    public static final Item ICE_QUEEN_RAID_KEY = register(
-            "ice_queen_raid_key",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.ice_queen_raid_key")
-    );
-
-    public static final Item KRAMPUS_RAID_KEY = register(
-            "krampus_raid_key",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.krampus_raid_key")
-    );
-
     public static final Item LOST_TOY = register(
             "lost_toy",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
@@ -349,48 +337,6 @@ public final class ModItems {
             "event_voucher_ev",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.voucher_ev")
-    );
-
-    public static final Item RAID_KEY = register(
-            "raid_key",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.raid_key")
-    );
-
-    public static final Item RAID_KEY_T6 = register(
-            "raid_key_t6",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.raid_key_t6")
-    );
-
-    public static final Item RAID_KEY_T7 = register(
-            "raid_key_t7",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.raid_key_t7")
-    );
-
-    public static final Item RAID_PASS = register(
-            "raid_pass",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.raid_pass")
-    );
-
-    public static final Item RAID_PASS_T6 = register(
-            "raid_pass_t6",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.raid_pass_t6")
-    );
-
-    public static final Item RAID_PASS_T7 = register(
-            "raid_pass_t7",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.raid_pass_t7")
-    );
-
-    public static final Item GRIM_REAPER_RAID_KEY = register(
-            "grim_reaper_raid_key",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.grim_reaper_raid_key")
     );
 
     private static Item register(String path, Item item) {

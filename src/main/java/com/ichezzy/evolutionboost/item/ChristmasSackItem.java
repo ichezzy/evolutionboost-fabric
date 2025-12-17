@@ -173,10 +173,6 @@ public class ChristmasSackItem extends Item {
         add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BALL_GREEN), 8);
         add(pool, () -> new ItemStack(ModItems.CHRISTMAS_BALL_RED), 8);
 
-        // Raid Keys (sehr wertvoll)
-        add(pool, () -> new ItemStack(ModItems.ICE_QUEEN_RAID_KEY), 4);
-        add(pool, () -> new ItemStack(ModItems.KRAMPUS_RAID_KEY), 4);
-
         // Legendäre Items
         add(pool, () -> new ItemStack(ModItems.SPIRIT_DEW), 3);
         add(pool, () -> new ItemStack(ModItems.LOST_TOY), 5);

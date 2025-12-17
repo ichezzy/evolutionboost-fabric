@@ -82,17 +82,6 @@ public final class ModItemGroup {
                             output.accept(ModItems.EVENT_VOUCHER_SHINY);
                             output.accept(ModItems.EVENT_VOUCHER_DROP);
                             output.accept(ModItems.EVENT_VOUCHER_EV);
-
-                            // Raid Keys & Passes
-                            output.accept(ModItems.RAID_KEY);
-                            output.accept(ModItems.RAID_KEY_T6);
-                            output.accept(ModItems.RAID_KEY_T7);
-                            output.accept(ModItems.RAID_PASS);
-                            output.accept(ModItems.RAID_PASS_T6);
-                            output.accept(ModItems.RAID_PASS_T7);
-                            output.accept(ModItems.GRIM_REAPER_RAID_KEY);
-                            output.accept(ModItems.ICE_QUEEN_RAID_KEY);
-                            output.accept(ModItems.KRAMPUS_RAID_KEY);
                         })
                         .build()
         );
