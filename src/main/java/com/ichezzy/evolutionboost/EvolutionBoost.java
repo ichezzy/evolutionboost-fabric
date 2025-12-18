@@ -3,6 +3,7 @@ package com.ichezzy.evolutionboost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.BoostCommand;
 import com.ichezzy.evolutionboost.command.EventCommand;
+import com.ichezzy.evolutionboost.command.QuestCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.command.WeatherCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
@@ -13,6 +14,10 @@ import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.item.TicketManager;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
+import com.ichezzy.evolutionboost.quest.QuestManager;
+import com.ichezzy.evolutionboost.quest.hooks.QuestBattleHook;
+import com.ichezzy.evolutionboost.quest.hooks.QuestCatchHook;
+import com.ichezzy.evolutionboost.quest.hooks.QuestItemHook;
 import com.ichezzy.evolutionboost.reward.RewardManager;
 import com.ichezzy.evolutionboost.weather.ChristmasWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
@@ -63,6 +68,7 @@ public class EvolutionBoost implements ModInitializer {
                     BoostCommand.register(d);
                     EventCommand.register(d);
                     WeatherCommand.register(d);
+                    QuestCommand.register(d);
                 }
         );
 
@@ -77,10 +83,15 @@ public class EvolutionBoost implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             RewardManager.init(server);
             BoostManager.get(server); // init/load
+            QuestManager.get().init(server); // Quest-System initialisieren
 
             if (FabricLoader.getInstance().isModLoaded("cobblemon")) {
                 HooksRegistrar.register(server);
-                LOGGER.info("Cobblemon detected – hooks registered");
+                // Quest-Hooks registrieren (benötigen Cobblemon)
+                QuestBattleHook.register();
+                QuestCatchHook.register();
+                QuestItemHook.register();
+                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest hooks)");
             } else {
                 LOGGER.warn("Cobblemon not detected – hooks skipped");
             }
@@ -112,5 +123,6 @@ public class EvolutionBoost implements ModInitializer {
         } catch (Throwable ignored) {
         }
         RewardManager.saveAll();
+        QuestManager.get().shutdown(); // Quest-Daten speichern
     }
 }
