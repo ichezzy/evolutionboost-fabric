@@ -11,14 +11,12 @@ import com.cobblemon.mod.common.battles.pokemon.BattlePokemon;
 import com.cobblemon.mod.common.pokemon.Pokemon;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.quest.QuestManager;
-import com.ichezzy.evolutionboost.quest.QuestObjective;
 import com.ichezzy.evolutionboost.quest.QuestType;
 import kotlin.Unit;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Hook für Cobblemon Battle Events.
@@ -44,17 +42,6 @@ public final class QuestBattleHook {
         try {
             PokemonBattle battle = event.getBattle();
             BattlePokemon faintedBattlePokemon = event.getKilled();
-            BattleActor killerActor = event.getKiller();
-
-            // Nur wenn der Killer ein Spieler ist
-            if (!(killerActor instanceof PlayerBattleActor playerActor)) {
-                return Unit.INSTANCE;
-            }
-
-            ServerPlayer player = playerActor.getEntity();
-            if (player == null) {
-                return Unit.INSTANCE;
-            }
 
             // Pokemon-Daten extrahieren
             Pokemon faintedPokemon = faintedBattlePokemon.getOriginalPokemon();
@@ -62,21 +49,33 @@ public final class QuestBattleHook {
                 return Unit.INSTANCE;
             }
 
-            String species = faintedPokemon.getSpecies().getName().toLowerCase();
-            String primaryType = faintedPokemon.getPrimaryType().getName().toLowerCase();
-            String secondaryType = faintedPokemon.getSecondaryType() != null
-                    ? faintedPokemon.getSecondaryType().getName().toLowerCase()
-                    : null;
-            int level = faintedPokemon.getLevel();
-            boolean shiny = faintedPokemon.getShiny();
+            // Finde den Actor zu dem das besiegte Pokemon gehört
+            BattleActor faintedActor = faintedBattlePokemon.getActor();
 
-            // Aspects extrahieren
-            List<String> aspects = new ArrayList<>(faintedPokemon.getAspects());
+            // Finde alle Spieler-Actors die NICHT der besiegte Actor sind (= die Gegner/Killer)
+            for (BattleActor actor : battle.getActors()) {
+                if (actor == faintedActor) continue; // Skip den Actor dessen Pokemon besiegt wurde
 
-            // Fortschritt für DEFEAT-Objectives
-            QuestManager.get().processProgress(player, QuestType.DEFEAT,
-                    obj -> obj.matchesPokemon(species, primaryType, secondaryType, aspects, level, shiny),
-                    1);
+                if (actor instanceof PlayerBattleActor playerActor) {
+                    ServerPlayer player = playerActor.getEntity();
+                    if (player == null) continue;
+
+                    // Pokemon-Info extrahieren
+                    String species = faintedPokemon.getSpecies().getName().toLowerCase();
+                    String primaryType = faintedPokemon.getPrimaryType().getName().toLowerCase();
+                    String secondaryType = faintedPokemon.getSecondaryType() != null
+                            ? faintedPokemon.getSecondaryType().getName().toLowerCase()
+                            : null;
+                    int level = faintedPokemon.getLevel();
+                    boolean shiny = faintedPokemon.getShiny();
+                    List<String> aspects = new ArrayList<>(faintedPokemon.getAspects());
+
+                    // Fortschritt für DEFEAT-Objectives
+                    QuestManager.get().processProgress(player, QuestType.DEFEAT,
+                            obj -> obj.matchesPokemon(species, primaryType, secondaryType, aspects, level, shiny),
+                            1);
+                }
+            }
 
         } catch (Exception e) {
             EvolutionBoost.LOGGER.debug("[quests] Error in onBattleFainted: {}", e.getMessage());

@@ -29,7 +29,7 @@ public final class QuestCatchHook {
         CobblemonEvents.EVOLUTION_COMPLETE.subscribe(Priority.NORMAL, QuestCatchHook::onEvolutionComplete);
 
         // Pokemon Level-Up
-        CobblemonEvents.LEVEL_UP.subscribe(Priority.NORMAL, QuestCatchHook::onLevelUp);
+        CobblemonEvents.LEVEL_UP_EVENT.subscribe(Priority.NORMAL, QuestCatchHook::onLevelUp);
 
         EvolutionBoost.LOGGER.info("[quests] QuestCatchHook registered.");
     }
@@ -159,11 +159,11 @@ public final class QuestCatchHook {
             var uuid = store.getUuid();
             if (uuid == null) return null;
 
-            // Server holen und Spieler finden
-            var server = net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
-                    .SERVER_STARTING.invoker();
-            // Alternativer Weg über gespeicherten Server
-            return null; // TODO: Bessere Implementierung
+            // Server über Cobblemon holen
+            var server = com.cobblemon.mod.common.Cobblemon.INSTANCE.getImplementation().server();
+            if (server == null) return null;
+
+            return server.getPlayerList().getPlayer(uuid);
         } catch (Exception e) {
             return null;
         }

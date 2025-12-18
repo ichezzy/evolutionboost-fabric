@@ -80,8 +80,7 @@ public class ChristmasSackItem extends Item {
 
         // EvolutionBoost Items (Common)
         add(pool, () -> new ItemStack(ModItems.GINGERBREAD, r(rand, 1, 3)), 25);
-        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_CANDY_BLUE, r(rand, 2, 5)), 25);
-        add(pool, () -> new ItemStack(ModItems.HOLY_SPARK, r(rand, 1, 5)), 25);
+        add(pool, () -> new ItemStack(ModItems.CHRISTMAS_CANDY_BLUE, r(rand, 2, 5)), 15);
 
         // Minecraft Items (Common)
         add(pool, () -> new ItemStack(Items.IRON_INGOT, r(rand, 2, 5)), 12);
@@ -108,8 +107,6 @@ public class ChristmasSackItem extends Item {
         // Cobblemon Items (Uncommon)
         add(pool, () -> stackOf("cobblemon", "revive", r(rand, 1, 2)), 12);
         add(pool, () -> stackOf("cobblemon", "full_heal", r(rand, 1, 2)), 10);
-        add(pool, () -> stackOf("cobblemon", "exp_candy_s", r(rand, 1, 3)), 10);
-        add(pool, () -> stackOf("cobblemon", "exp_candy_m", r(rand, 1, 2)), 8);
 
         // SimpleHats Christmas
         add(pool, () -> stackOf("simplehats", "hatbag_festive", 1), 3);
@@ -135,7 +132,6 @@ public class ChristmasSackItem extends Item {
         add(pool, () -> stackOf("cobblemon", "max_potion", 1), 6);
         add(pool, () -> stackOf("cobblemon", "max_ether", 1), 6);
         add(pool, () -> stackOf("cobblemon", "max_elixir", 1), 6);
-        add(pool, () -> stackOf("cobblemon", "exp_candy_l", r(rand, 1, 2)), 6);
 
         // Cobblemon Vitamins (Rare)
         add(pool, () -> stackOf("cobblemon", "protein", 1), 4);
@@ -167,8 +163,6 @@ public class ChristmasSackItem extends Item {
         add(pool, () -> stackOf("cobblemon", "max_revive", 1), 8);
         add(pool, () -> stackOf("cobblemon", "full_restore", 1), 8);
         add(pool, () -> stackOf("cobblemon", "pp_max", 1), 5);
-        add(pool, () -> stackOf("cobblemon", "exp_candy_xl", r(rand, 1, 2)), 6);
-        add(pool, () -> stackOf("cobblemon", "rare_candy", 1), 4);
 
         return pool;
     }

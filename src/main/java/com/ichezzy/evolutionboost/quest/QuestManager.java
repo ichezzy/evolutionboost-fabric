@@ -288,17 +288,23 @@ public final class QuestManager {
                         int newProgress = data.incrementObjectiveProgress(questId, obj.getId(), amount);
                         anyProgress = true;
 
-                        // Fortschritts-Nachricht
+                        // Fortschritts-Nachricht mit Quest-Name
                         if (newProgress >= obj.getTarget()) {
-                            player.sendSystemMessage(Component.literal("[Quest] ")
+                            // Objective abgeschlossen
+                            player.sendSystemMessage(Component.literal("[" + quest.getName() + "] ")
                                     .withStyle(ChatFormatting.GREEN)
-                                    .append(Component.literal("Objective complete: " + obj.getDescription())
-                                            .withStyle(ChatFormatting.WHITE)));
+                                    .append(Component.literal("✓ " + obj.getDescription() + " ")
+                                            .withStyle(ChatFormatting.WHITE))
+                                    .append(Component.literal("[" + newProgress + "/" + obj.getTarget() + "]")
+                                            .withStyle(ChatFormatting.GREEN)));
                         } else {
-                            player.sendSystemMessage(Component.literal("[Quest] ")
-                                    .withStyle(ChatFormatting.GRAY)
-                                    .append(Component.literal(obj.getDescription() + ": " + newProgress + "/" + obj.getTarget())
-                                            .withStyle(ChatFormatting.WHITE)));
+                            // Fortschritt
+                            player.sendSystemMessage(Component.literal("[" + quest.getName() + "] ")
+                                    .withStyle(ChatFormatting.GOLD)
+                                    .append(Component.literal(obj.getDescription() + " ")
+                                            .withStyle(ChatFormatting.WHITE))
+                                    .append(Component.literal("[" + newProgress + "/" + obj.getTarget() + "]")
+                                            .withStyle(ChatFormatting.YELLOW)));
                         }
                     }
                 }
@@ -307,10 +313,16 @@ public final class QuestManager {
             // Prüfe ob Quest jetzt abschlussbereit
             if (anyProgress && areAllObjectivesComplete(quest, data, questId)) {
                 data.setStatus(questId, QuestStatus.READY_TO_COMPLETE);
-                player.sendSystemMessage(Component.literal("[Quest] ")
-                        .withStyle(ChatFormatting.GOLD)
-                        .append(Component.literal("Quest ready to turn in: " + quest.getName())
-                                .withStyle(ChatFormatting.YELLOW)));
+                player.sendSystemMessage(Component.literal("══════════════════════════════")
+                        .withStyle(ChatFormatting.GREEN));
+                player.sendSystemMessage(Component.literal("  ★ QUEST COMPLETE ★")
+                        .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+                player.sendSystemMessage(Component.literal("  " + quest.getName())
+                        .withStyle(ChatFormatting.YELLOW));
+                player.sendSystemMessage(Component.literal("  Return to claim your rewards!")
+                        .withStyle(ChatFormatting.GRAY));
+                player.sendSystemMessage(Component.literal("══════════════════════════════")
+                        .withStyle(ChatFormatting.GREEN));
             }
         }
 
@@ -346,9 +358,56 @@ public final class QuestManager {
     }
 
     private void loadQuests() {
-        // Für jetzt: Hardcoded Christmas Quests
+        // Für jetzt: Hardcoded Quests
         // Später: Aus JSON-Dateien laden
+        registerTestQuests();
         registerChristmasQuests();
+    }
+
+    private void registerTestQuests() {
+        // ==================== TEST QUESTS ====================
+        // Diese Quests sind zum Testen des Quest-Systems gedacht
+
+        // Test: Catch 3x Magikarp
+        registerQuest(Quest.builder("test", "catch")
+                .name("Test: Catch Magikarp")
+                .description("Catch 3 Magikarp to test the catch tracking system.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(1)
+                .autoActivate(false)
+                .objective(new QuestObjective("catch_magikarp", QuestType.CATCH,
+                        "Catch Magikarp", 3,
+                        Map.of("species", List.of("magikarp"))))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "minecraft:diamond", 1))
+                .build());
+
+        // Test: Defeat 3x Magikarp
+        registerQuest(Quest.builder("test", "defeat")
+                .name("Test: Defeat Magikarp")
+                .description("Defeat 3 Magikarp in battle to test the defeat tracking system.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(2)
+                .autoActivate(false)
+                .objective(new QuestObjective("defeat_magikarp", QuestType.DEFEAT,
+                        "Defeat Magikarp", 3,
+                        Map.of("species", List.of("magikarp"))))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "minecraft:emerald", 1))
+                .build());
+
+        // Test: Collect 3x Nether Star
+        registerQuest(Quest.builder("test", "collect")
+                .name("Test: Collect Nether Stars")
+                .description("Collect 3 Nether Stars to test the item collection tracking system.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(3)
+                .autoActivate(false)
+                .objective(new QuestObjective("collect_stars", QuestType.COLLECT_ITEM,
+                        "Collect Nether Stars", 3,
+                        Map.of("item", "minecraft:nether_star")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "minecraft:netherite_ingot", 1))
+                .build());
+
+        EvolutionBoost.LOGGER.info("[quests] Registered 3 test quests.");
     }
 
     private void registerChristmasQuests() {

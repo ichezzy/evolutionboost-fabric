@@ -153,25 +153,25 @@ public final class ModItems {
 
     public static final Item CHRISTMAS_CANDY = register(
             "christmas_candy",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.christmas_candy")
     );
 
     public static final Item CHRISTMAS_CANDY_BLUE = register(
             "christmas_candy_blue",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.COMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.COMMON),
                     "tooltip.evolutionboost.christmas_candy_blue")
     );
 
     public static final Item CHRISTMAS_CANDY_PINK = register(
             "christmas_candy_pink",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.christmas_candy_pink")
     );
 
     public static final Item CHRISTMAS_CANDY_PURPLE = register(
             "christmas_candy_purple",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.christmas_candy_purple")
     );
 
@@ -206,7 +206,7 @@ public final class ModItems {
 
     public static final Item CURSED_COAL = register(
             "cursed_coal",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.cursed_coal")
     );
 
@@ -218,13 +218,13 @@ public final class ModItems {
 
     public static final Item CURSED_GIFT_BLACK = register(
             "cursed_gift_black",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.cursed_gift_black")
     );
 
     public static final Item CURSED_GIFT_PURPLE = register(
             "cursed_gift_purple",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.UNCOMMON),
                     "tooltip.evolutionboost.cursed_gift_purple")
     );
 
@@ -254,7 +254,7 @@ public final class ModItems {
 
     public static final Item GINGERBREAD = register(
             "gingerbread",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.COMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.COMMON),
                     "tooltip.evolutionboost.gingerbread")
     );
 
@@ -266,7 +266,7 @@ public final class ModItems {
 
     public static final Item HOLY_SPARK = register(
             "holy_spark",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.COMMON),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.COMMON),
                     "tooltip.evolutionboost.holy_spark")
     );
 
@@ -302,7 +302,7 @@ public final class ModItems {
 
     public static final Item SPIRIT_DEW_SHARDS = register(
             "spirit_dew_shards",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
+            new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.RARE),
                     "tooltip.evolutionboost.spirit_dew_shards")
     );
 
