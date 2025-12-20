@@ -117,6 +117,145 @@ public final class QuestManager {
         return playerData.get(playerId);
     }
 
+    /**
+     * Berechnet den effektiven Status einer Quest für einen Spieler.
+     * Berücksichtigt: gespeicherter Status, Prerequisites, autoActivate, requiresUnlock.
+     *
+     * Logik:
+     * - Wenn ACTIVE/READY/COMPLETED/AVAILABLE → diesen Status zurückgeben
+     * - Wenn LOCKED oder nicht gesetzt:
+     *   - Wenn requiresUnlock → LOCKED (muss per /eb quest unlock freigeschaltet werden)
+     *   - Prüfe Prerequisites
+     *   - Wenn erfüllt UND nicht autoActivate → AVAILABLE (Spieler kann starten)
+     *   - Wenn erfüllt UND autoActivate → ACTIVE (automatisch starten)
+     *   - Wenn nicht erfüllt → LOCKED
+     */
+    public QuestStatus getEffectiveStatus(ServerPlayer player, String questId) {
+        Optional<Quest> questOpt = getQuest(questId);
+        if (questOpt.isEmpty()) {
+            return QuestStatus.LOCKED;
+        }
+
+        Quest quest = questOpt.get();
+        PlayerQuestData data = getPlayerData(player);
+        QuestStatus storedStatus = data.getStatus(questId);
+
+        // Bereits aktiv oder weiter → diesen Status behalten
+        if (storedStatus == QuestStatus.ACTIVE ||
+            storedStatus == QuestStatus.READY_TO_COMPLETE ||
+            storedStatus == QuestStatus.COMPLETED ||
+            storedStatus == QuestStatus.AVAILABLE) {
+            return storedStatus;
+        }
+
+        // LOCKED oder nicht gesetzt
+        
+        // Wenn Quest requiresUnlock, bleibt sie LOCKED bis explizit freigeschaltet
+        if (quest.requiresUnlock()) {
+            return QuestStatus.LOCKED;
+        }
+
+        // Prüfe Prerequisites
+        boolean prereqsMet = true;
+        for (String prereq : quest.getPrerequisites()) {
+            if (!data.isCompleted(prereq)) {
+                prereqsMet = false;
+                break;
+            }
+        }
+
+        if (!prereqsMet) {
+            return QuestStatus.LOCKED;
+        }
+
+        // Prerequisites erfüllt
+        if (quest.isAutoActivate()) {
+            // Auto-aktivieren und speichern
+            data.setStatus(questId, QuestStatus.ACTIVE);
+            savePlayerData(player.getUUID());
+            return QuestStatus.ACTIVE;
+        } else {
+            // Spieler muss selbst starten → AVAILABLE
+            return QuestStatus.AVAILABLE;
+        }
+    }
+
+    /**
+     * Holt alle verfügbaren Quests für einen Spieler.
+     */
+    public Set<String> getAvailableQuests(ServerPlayer player) {
+        Set<String> available = new HashSet<>();
+        for (Quest quest : quests.values()) {
+            QuestStatus status = getEffectiveStatus(player, quest.getFullId());
+            if (status == QuestStatus.AVAILABLE) {
+                available.add(quest.getFullId());
+            }
+        }
+        return available;
+    }
+
+    /**
+     * Benachrichtigt einen Spieler über verfügbare Quests.
+     * Wird beim Join und wenn neue Quests verfügbar werden aufgerufen.
+     */
+    public void notifyAvailableQuests(ServerPlayer player) {
+        Set<String> available = getAvailableQuests(player);
+        
+        if (available.isEmpty()) {
+            return; // Keine Benachrichtigung wenn nichts verfügbar
+        }
+
+        player.sendSystemMessage(Component.literal(""));
+        player.sendSystemMessage(Component.literal("═══ Quests Available! ═══")
+                .withStyle(ChatFormatting.GOLD));
+
+        for (String questId : available) {
+            getQuest(questId).ifPresent(quest -> {
+                player.sendSystemMessage(Component.literal("  ★ " + quest.getName())
+                        .withStyle(ChatFormatting.AQUA)
+                        .append(Component.literal(" - /eb quest start " + quest.getQuestLine() + " " + quest.getId())
+                                .withStyle(ChatFormatting.GRAY)));
+            });
+        }
+
+        player.sendSystemMessage(Component.literal("═════════════════════════")
+                .withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal(""));
+    }
+
+    /**
+     * Prüft ob ein Spieler nach einer Quest-Aktion neue Quests verfügbar hat.
+     * Wird nach completeQuest aufgerufen.
+     */
+    public void checkAndNotifyNewQuests(ServerPlayer player, Set<String> previouslyAvailable) {
+        Set<String> nowAvailable = getAvailableQuests(player);
+        
+        // Neue Quests = jetzt verfügbar aber vorher nicht
+        Set<String> newQuests = new HashSet<>(nowAvailable);
+        newQuests.removeAll(previouslyAvailable);
+        
+        if (newQuests.isEmpty()) {
+            return;
+        }
+
+        player.sendSystemMessage(Component.literal(""));
+        player.sendSystemMessage(Component.literal("═══ New Quest Unlocked! ═══")
+                .withStyle(ChatFormatting.GREEN));
+
+        for (String questId : newQuests) {
+            getQuest(questId).ifPresent(quest -> {
+                player.sendSystemMessage(Component.literal("  ★ " + quest.getName())
+                        .withStyle(ChatFormatting.AQUA)
+                        .append(Component.literal(" - /eb quest start " + quest.getQuestLine() + " " + quest.getId())
+                                .withStyle(ChatFormatting.GRAY)));
+            });
+        }
+
+        player.sendSystemMessage(Component.literal("═══════════════════════════")
+                .withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal(""));
+    }
+
     // ==================== Quest Status Management ====================
 
     /**
@@ -259,6 +398,141 @@ public final class QuestManager {
         savePlayerData(player.getUUID());
     }
 
+    /**
+     * Komplettiert eine Quest MIT Item-Entfernung.
+     * Entfernt COLLECT_ITEM Items aus dem Inventar und gibt dann Rewards.
+     */
+    public boolean completeQuestWithItemRemoval(ServerPlayer player, String questId) {
+        Optional<Quest> questOpt = getQuest(questId);
+        if (questOpt.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Unknown quest: " + questId)
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+
+        Quest quest = questOpt.get();
+        PlayerQuestData data = getPlayerData(player);
+
+        // Prüfe ob Quest aktiv oder ready ist
+        QuestStatus status = data.getStatus(questId);
+        if (status != QuestStatus.ACTIVE && status != QuestStatus.READY_TO_COMPLETE) {
+            player.sendSystemMessage(Component.literal("Quest is not active: " + questId)
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+
+        // Prüfe ob alle Objectives erfüllt sind
+        if (!areAllObjectivesComplete(quest, data, questId)) {
+            player.sendSystemMessage(Component.literal("Quest objectives not complete!")
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+
+        // Speichere vorher verfügbare Quests für spätere Benachrichtigung
+        Set<String> previouslyAvailable = getAvailableQuests(player);
+
+        // COLLECT_ITEM Items aus dem Inventar entfernen (nur wenn consume=true)
+        for (QuestObjective obj : quest.getObjectivesByType(QuestType.COLLECT_ITEM)) {
+            String itemId = obj.getFilterString("item");
+            if (itemId != null && obj.shouldConsumeItems()) {
+                int required = obj.getTarget();
+                boolean removed = com.ichezzy.evolutionboost.quest.hooks.QuestItemHook
+                        .removeItemsFromInventory(player, itemId, required);
+                
+                if (!removed) {
+                    player.sendSystemMessage(Component.literal("Failed to remove items: " + itemId)
+                            .withStyle(ChatFormatting.RED));
+                    return false;
+                }
+                
+                player.sendSystemMessage(Component.literal("  ✗ Removed " + required + "x " + itemId)
+                        .withStyle(ChatFormatting.GRAY));
+            }
+        }
+
+        // Quest als COMPLETED markieren
+        data.setStatus(questId, QuestStatus.COMPLETED);
+
+        // Rewards geben
+        player.sendSystemMessage(Component.literal("═══════════════════════════════")
+                .withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("  Quest Completed: ")
+                .withStyle(ChatFormatting.GREEN)
+                .append(Component.literal(quest.getName()).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
+        player.sendSystemMessage(Component.literal("  Rewards:").withStyle(ChatFormatting.AQUA));
+
+        for (QuestReward reward : quest.getRewards()) {
+            if (reward.grantTo(player)) {
+                player.sendSystemMessage(Component.literal("    • " + reward.getDisplayText())
+                        .withStyle(ChatFormatting.WHITE));
+            }
+        }
+
+        player.sendSystemMessage(Component.literal("═══════════════════════════════")
+                .withStyle(ChatFormatting.GOLD));
+
+        savePlayerData(player.getUUID());
+
+        // Auto-aktiviere nächste Quest wenn sequentiell
+        autoActivateNextQuest(player, quest);
+
+        // Benachrichtige über neu verfügbare Quests
+        checkAndNotifyNewQuests(player, previouslyAvailable);
+
+        return true;
+    }
+
+    /**
+     * Admin-Funktion: Quest sofort abschließen ohne Objective-Prüfung.
+     * Items werden NICHT aus dem Inventar entfernt.
+     * Rewards werden gegeben.
+     */
+    public boolean forceCompleteQuest(ServerPlayer player, String questId) {
+        Optional<Quest> questOpt = getQuest(questId);
+        if (questOpt.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Unknown quest: " + questId)
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+
+        Quest quest = questOpt.get();
+        PlayerQuestData data = getPlayerData(player);
+
+        // Speichere vorher verfügbare Quests für spätere Benachrichtigung
+        Set<String> previouslyAvailable = getAvailableQuests(player);
+
+        // Quest als COMPLETED markieren (ohne Objective-Prüfung!)
+        data.setStatus(questId, QuestStatus.COMPLETED);
+
+        // Rewards geben
+        player.sendSystemMessage(Component.literal("═══════════════════════════════")
+                .withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("  Quest Completed (Admin): ")
+                .withStyle(ChatFormatting.GREEN)
+                .append(Component.literal(quest.getName()).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
+        player.sendSystemMessage(Component.literal("  Rewards:").withStyle(ChatFormatting.AQUA));
+
+        for (QuestReward reward : quest.getRewards()) {
+            if (reward.grantTo(player)) {
+                player.sendSystemMessage(Component.literal("    • " + reward.getDisplayText())
+                        .withStyle(ChatFormatting.WHITE));
+            }
+        }
+
+        player.sendSystemMessage(Component.literal("═══════════════════════════════")
+                .withStyle(ChatFormatting.GOLD));
+
+        savePlayerData(player.getUUID());
+
+        // Auto-aktiviere nächste Quest wenn sequentiell
+        autoActivateNextQuest(player, quest);
+
+        // Benachrichtige über neu verfügbare Quests
+        checkAndNotifyNewQuests(player, previouslyAvailable);
+
+        return true;
+    }
+
     // ==================== Progress Tracking ====================
 
     /**
@@ -360,83 +634,206 @@ public final class QuestManager {
     private void loadQuests() {
         // Für jetzt: Hardcoded Quests
         // Später: Aus JSON-Dateien laden
-        registerTestQuests();
         registerChristmasQuests();
     }
 
-    private void registerTestQuests() {
-        // ==================== TEST QUESTS ====================
-        // Diese Quests sind zum Testen des Quest-Systems gedacht
-
-        // Test: Catch 3x Magikarp
-        registerQuest(Quest.builder("test", "catch")
-                .name("Test: Catch Magikarp")
-                .description("Catch 3 Magikarp to test the catch tracking system.")
-                .category(QuestCategory.SIDE)
-                .sortOrder(1)
-                .autoActivate(false)
-                .objective(new QuestObjective("catch_magikarp", QuestType.CATCH,
-                        "Catch Magikarp", 3,
-                        Map.of("species", List.of("magikarp"))))
-                .reward(new QuestReward(QuestReward.RewardType.ITEM, "minecraft:diamond", 1))
-                .build());
-
-        // Test: Defeat 3x Magikarp
-        registerQuest(Quest.builder("test", "defeat")
-                .name("Test: Defeat Magikarp")
-                .description("Defeat 3 Magikarp in battle to test the defeat tracking system.")
-                .category(QuestCategory.SIDE)
-                .sortOrder(2)
-                .autoActivate(false)
-                .objective(new QuestObjective("defeat_magikarp", QuestType.DEFEAT,
-                        "Defeat Magikarp", 3,
-                        Map.of("species", List.of("magikarp"))))
-                .reward(new QuestReward(QuestReward.RewardType.ITEM, "minecraft:emerald", 1))
-                .build());
-
-        // Test: Collect 3x Nether Star
-        registerQuest(Quest.builder("test", "collect")
-                .name("Test: Collect Nether Stars")
-                .description("Collect 3 Nether Stars to test the item collection tracking system.")
-                .category(QuestCategory.SIDE)
-                .sortOrder(3)
-                .autoActivate(false)
-                .objective(new QuestObjective("collect_stars", QuestType.COLLECT_ITEM,
-                        "Collect Nether Stars", 3,
-                        Map.of("item", "minecraft:nether_star")))
-                .reward(new QuestReward(QuestReward.RewardType.ITEM, "minecraft:netherite_ingot", 1))
-                .build());
-
-        EvolutionBoost.LOGGER.info("[quests] Registered 3 test quests.");
-    }
-
     private void registerChristmasQuests() {
-        // MQ1: The Frozen Guardians
+        // ==================== CHRISTMAS 2024 MAIN QUESTS ====================
+        // MQ1 benötigt unlock per NPC, MQ2-MQ5 werden durch Prerequisites freigeschaltet
+
+        // MQ1: Chaos in The Toy Factory (benötigt unlock per NPC)
         registerQuest(Quest.builder("christmas", "mq1")
-                .name("The Frozen Guardians")
-                .description("Defeat the corrupted Christmas Pokemon and collect cursed gifts.")
+                .name("Chaos in The Toy Factory")
+                .description("The toy factory has been corrupted! Defeat the wrapped Pokemon and collect the cursed gifts. Talk to Carol Tinseltoe for details.")
                 .category(QuestCategory.MAIN)
                 .sortOrder(1)
                 .autoActivate(false)
-                .objective(new QuestObjective("defeat_pokemon", QuestType.DEFEAT,
-                        "Defeat Christmas Pokemon", 50,
+                .requiresUnlock(true)
+                .objective(new QuestObjective("defeat_wrapped", QuestType.DEFEAT,
+                        "Defeat Wrapped Pokemon", 50,
                         Map.of(
-                                "species", List.of("stonjourner", "oddish", "gloom", "vileplume", "togepi", "togetic", "togekiss"),
+                                "species", List.of("oddish", "gloom", "vileplume", "togepi", "togetic", "togekiss", "stonjourner"),
                                 "aspects", List.of("christmas")
                         )))
-                .objective(new QuestObjective("collect_purple", QuestType.COLLECT_ITEM,
-                        "Collect Purple Presents", 25,
-                        Map.of("item", "evolutionboost:cursed_gift_purple")))
                 .objective(new QuestObjective("collect_black", QuestType.COLLECT_ITEM,
-                        "Collect Black Presents", 5,
+                        "Collect Cursed Gift Black", 25,
                         Map.of("item", "evolutionboost:cursed_gift_black")))
-                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:holy_spark", 100))
-                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:christmas_loot_sack", 5))
-                .reward(new QuestReward(QuestReward.RewardType.XP, "", 500))
+                .objective(new QuestObjective("collect_purple", QuestType.COLLECT_ITEM,
+                        "Collect Cursed Gift Purple", 5,
+                        Map.of("item", "evolutionboost:cursed_gift_purple")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 5))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:wind_up_key", 1))
                 .build());
 
-        // Placeholder für weitere Quests
-        // TODO: MQ2, MQ3, etc.
+        // MQ2: Krampus' Curse 1
+        registerQuest(Quest.builder("christmas", "mq2")
+                .name("Krampus' Curse 1")
+                .description("Krampus' minions are spreading darkness! Defeat them and collect the cursed coal. Talk to Skipper for details.")
+                .category(QuestCategory.MAIN)
+                .sortOrder(2)
+                .autoActivate(false)
+                .prerequisite("christmas:mq1")
+                .objective(new QuestObjective("defeat_krampus", QuestType.DEFEAT,
+                        "Defeat Krampus Pokemon", 25,
+                        Map.of(
+                                "species", List.of("impidimp", "morgrem", "grimmsnarl"),
+                                "aspects", List.of("christmas")
+                        )))
+                .objective(new QuestObjective("collect_coal", QuestType.COLLECT_ITEM,
+                        "Collect Cursed Coal", 50,
+                        Map.of("item", "evolutionboost:cursed_coal")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 5))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "crdkeys:krampus_raid_key", 1))
+                .build());
+
+        // MQ3: Krampus' Curse 2 (Raid Quest)
+        registerQuest(Quest.builder("christmas", "mq3")
+                .name("Krampus' Curse 2")
+                .description("Face Krampus himself and obtain his corrupted heart! Talk to Fizz for details.")
+                .category(QuestCategory.MAIN)
+                .sortOrder(3)
+                .autoActivate(false)
+                .prerequisite("christmas:mq2")
+                .objective(new QuestObjective("collect_heart", QuestType.COLLECT_ITEM,
+                        "Obtain Cursed Coal Heart", 1,
+                        Map.of("item", "evolutionboost:cursed_coal_heart")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 5))
+                .build());
+
+        // MQ4: Purification of the Heart
+        registerQuest(Quest.builder("christmas", "mq4")
+                .name("Purification of the Heart")
+                .description("Collect holy sparks to purify the darkness and prepare for the final confrontation. Talk to the Christmas Angel for details.")
+                .category(QuestCategory.MAIN)
+                .sortOrder(4)
+                .autoActivate(false)
+                .prerequisite("christmas:mq3")
+                .objective(new QuestObjective("collect_sparks", QuestType.COLLECT_ITEM,
+                        "Collect Holy Spark", 100,
+                        Map.of("item", "evolutionboost:holy_spark")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 5))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "crdkeys:ice_queen_raid_key", 1))
+                .build());
+
+        // MQ5: Wrath of the Ice Queen (Raid Quest)
+        // Ice Crown wird NICHT konsumiert (consume: false)
+        registerQuest(Quest.builder("christmas", "mq5")
+                .name("Wrath of the Ice Queen")
+                .description("Defeat the Ice Queen and claim her crown as proof of your victory! Talk to Frodo for details.")
+                .category(QuestCategory.MAIN)
+                .sortOrder(5)
+                .autoActivate(false)
+                .prerequisite("christmas:mq4")
+                .objective(new QuestObjective("collect_crown", QuestType.COLLECT_ITEM,
+                        "Obtain Ice Crown", 1,
+                        Map.of("item", "evolutionboost:ice_crown", "consume", false)))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_gold", 1))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:christmas25_medal", 1))
+                .build());
+
+        EvolutionBoost.LOGGER.info("[quests] Registered 5 Christmas main quests.");
+
+        // ==================== CHRISTMAS 2024 SIDE QUESTS ====================
+        // Alle Side Quests starten als LOCKED und werden per NPC-Command freigeschaltet
+
+        // SQ1: The Grinch
+        registerQuest(Quest.builder("christmas", "sq1")
+                .name("The Grinch")
+                .description("The Grinch is terrorizing the village! Defeat him to restore Christmas spirit. Talk to Santa for details.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(10)
+                .autoActivate(false)
+                .requiresUnlock(true)
+                .objective(new QuestObjective("defeat_grinch", QuestType.DEFEAT,
+                        "Defeat the Grinch (Infernape)", 1,
+                        Map.of(
+                                "species", List.of("infernape"),
+                                "aspects", List.of("christmas")
+                        )))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 3))
+                .build());
+
+        // SQ2: The Yeti
+        registerQuest(Quest.builder("christmas", "sq2")
+                .name("The Yeti")
+                .description("A mighty Yeti roams the frozen tundra. Can you defeat this legendary beast? Talk to the Yeti for details.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(11)
+                .autoActivate(false)
+                .requiresUnlock(true)
+                .objective(new QuestObjective("defeat_yeti", QuestType.DEFEAT,
+                        "Defeat the Yeti (Empoleon)", 1,
+                        Map.of(
+                                "species", List.of("empoleon"),
+                                "aspects", List.of("christmas")
+                        )))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 3))
+                .build());
+
+        // SQ3: The Christmas Tree
+        registerQuest(Quest.builder("christmas", "sq3")
+                .name("The Christmas Tree")
+                .description("The ancient Christmas Tree has awakened! Face this legendary guardian. Talk to Frodo for details.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(12)
+                .autoActivate(false)
+                .requiresUnlock(true)
+                .objective(new QuestObjective("defeat_tree", QuestType.DEFEAT,
+                        "Defeat the Christmas Tree (Torterra)", 1,
+                        Map.of(
+                                "species", List.of("torterra"),
+                                "aspects", List.of("christmas")
+                        )))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 3))
+                .build());
+
+        // SQ4a: Blizzy's Blissful Bakery - Part 1 (Collect) - benötigt unlock per NPC
+        registerQuest(Quest.builder("christmas", "sq4a")
+                .name("Blizzy's Blissful Bakery")
+                .description("The Gingerbread Man needs ingredients for his famous treats! Talk to the Gingerbread Man for details.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(13)
+                .autoActivate(false)
+                .requiresUnlock(true)
+                .objective(new QuestObjective("collect_candy", QuestType.COLLECT_ITEM,
+                        "Collect Christmas Candy", 3,
+                        Map.of("item", "evolutionboost:christmas_candy")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:candy_cane", 1))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 3))
+                .build());
+
+        // SQ4b: Blizzy's Blissful Bakery - Part 2 (Defeat) - wird automatisch nach SQ4a verfügbar
+        registerQuest(Quest.builder("christmas", "sq4b")
+                .name("Blizzy's Blissful Bakery 2")
+                .description("A wild Tinkaton is causing chaos in the bakery! Defeat it to save the gingerbread house. Talk to the Gingerbread Man for details.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(14)
+                .autoActivate(false)
+                .prerequisite("christmas:sq4a")
+                .objective(new QuestObjective("defeat_tinkaton", QuestType.DEFEAT,
+                        "Defeat the Bakery Menace (Tinkaton)", 1,
+                        Map.of(
+                                "species", List.of("tinkaton"),
+                                "aspects", List.of("christmas")
+                        )))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:evolution_coin_silver", 3))
+                .build());
+
+        // SQ5: Keeper of the Frozen Lake - benötigt unlock per NPC
+        registerQuest(Quest.builder("christmas", "sq5")
+                .name("Keeper of the Frozen Lake")
+                .description("Gather the mystical Spirit Dew Shards scattered across the frozen lake. Talk to Skipper for details.")
+                .category(QuestCategory.SIDE)
+                .sortOrder(15)
+                .autoActivate(false)
+                .requiresUnlock(true)
+                .objective(new QuestObjective("collect_shards", QuestType.COLLECT_ITEM,
+                        "Collect Spirit Dew Shards", 9,
+                        Map.of("item", "evolutionboost:spirit_dew_shards")))
+                .reward(new QuestReward(QuestReward.RewardType.ITEM, "evolutionboost:spirit_dew", 1))
+                .build());
+
+        EvolutionBoost.LOGGER.info("[quests] Registered 7 Christmas side quests.");
     }
 
     public void loadAllPlayerData() {

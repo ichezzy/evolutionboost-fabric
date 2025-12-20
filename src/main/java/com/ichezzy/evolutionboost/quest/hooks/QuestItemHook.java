@@ -1,13 +1,13 @@
 package com.ichezzy.evolutionboost.quest.hooks;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.quest.PlayerQuestData;
 import com.ichezzy.evolutionboost.quest.QuestManager;
+import com.ichezzy.evolutionboost.quest.QuestStatus;
 import com.ichezzy.evolutionboost.quest.QuestType;
-import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
@@ -49,37 +49,66 @@ public final class QuestItemHook {
 
     /**
      * Prüft das Inventar eines Spielers auf Quest-Items.
-     * Kann periodisch aufgerufen werden als Alternative zum Pickup-Hook.
+     * Wird periodisch aufgerufen (alle 2 Sekunden) und bei /eb quest progress.
      */
     public static void checkInventoryForQuests(ServerPlayer player) {
         try {
             QuestManager qm = QuestManager.get();
+            PlayerQuestData data = qm.getPlayerData(player);
 
             // Für jede aktive Quest mit COLLECT_ITEM Objectives
-            for (String questId : qm.getPlayerData(player).getActiveQuests()) {
+            for (String questId : data.getActiveQuests()) {
                 qm.getQuest(questId).ifPresent(quest -> {
+                    boolean anyProgressMade = false;
+                    
                     for (var obj : quest.getObjectivesByType(QuestType.COLLECT_ITEM)) {
                         String requiredItem = obj.getFilterString("item");
                         if (requiredItem == null) continue;
 
                         // Zähle Items im Inventar
                         int count = countItemsInInventory(player, requiredItem);
-                        int currentProgress = qm.getPlayerData(player).getObjectiveProgress(questId, obj.getId());
+                        int currentProgress = data.getObjectiveProgress(questId, obj.getId());
 
-                        // Setze Fortschritt auf Inventar-Anzahl (falls höher)
-                        if (count > currentProgress) {
-                            qm.getPlayerData(player).setObjectiveProgress(questId, obj.getId(), count);
-
-                            // Nachricht wenn Target erreicht
+                        // Setze Fortschritt auf Inventar-Anzahl (falls anders)
+                        if (count != currentProgress) {
+                            data.setObjectiveProgress(questId, obj.getId(), Math.min(count, obj.getTarget()));
+                            
+                            // Nachricht wenn Target neu erreicht
                             if (currentProgress < obj.getTarget() && count >= obj.getTarget()) {
                                 player.sendSystemMessage(
-                                        net.minecraft.network.chat.Component.literal("[Quest] ")
+                                        net.minecraft.network.chat.Component.literal("[" + quest.getName() + "] ")
                                                 .withStyle(net.minecraft.ChatFormatting.GREEN)
                                                 .append(net.minecraft.network.chat.Component.literal(
-                                                                "Objective complete: " + obj.getDescription())
+                                                                "✓ " + obj.getDescription())
                                                         .withStyle(net.minecraft.ChatFormatting.WHITE))
+                                                .append(net.minecraft.network.chat.Component.literal(
+                                                                " [" + obj.getTarget() + "/" + obj.getTarget() + "]")
+                                                        .withStyle(net.minecraft.ChatFormatting.GREEN))
                                 );
+                                anyProgressMade = true;
                             }
+                        }
+                    }
+                    
+                    // Prüfe ob ALLE Objectives der Quest erfüllt sind
+                    if (anyProgressMade && qm.areAllObjectivesComplete(quest, data, questId)) {
+                        QuestStatus currentStatus = data.getStatus(questId);
+                        if (currentStatus == QuestStatus.ACTIVE) {
+                            data.setStatus(questId, QuestStatus.READY_TO_COMPLETE);
+                            
+                            // Quest-Complete Nachricht
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("══════════════════════════════")
+                                    .withStyle(net.minecraft.ChatFormatting.GREEN));
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("  ★ QUEST READY ★")
+                                    .withStyle(net.minecraft.ChatFormatting.GREEN, net.minecraft.ChatFormatting.BOLD));
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("  " + quest.getName())
+                                    .withStyle(net.minecraft.ChatFormatting.YELLOW));
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("  Return to claim your rewards!")
+                                    .withStyle(net.minecraft.ChatFormatting.GRAY));
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("══════════════════════════════")
+                                    .withStyle(net.minecraft.ChatFormatting.GREEN));
+                            
+                            qm.savePlayerData(player.getUUID());
                         }
                     }
                 });

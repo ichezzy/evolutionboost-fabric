@@ -17,6 +17,7 @@ public class Quest {
     private final List<QuestReward> rewards;
     private final boolean autoActivate;     // Automatisch aktivieren wenn prerequisites erfüllt
     private final boolean hidden;           // Quest versteckt bis aktiviert
+    private final boolean requiresUnlock;   // Quest muss per Command freigeschaltet werden
     private final int sortOrder;            // Für Sortierung in Listen
 
     private Quest(Builder builder) {
@@ -30,6 +31,7 @@ public class Quest {
         this.rewards = List.copyOf(builder.rewards);
         this.autoActivate = builder.autoActivate;
         this.hidden = builder.hidden;
+        this.requiresUnlock = builder.requiresUnlock;
         this.sortOrder = builder.sortOrder;
     }
 
@@ -82,6 +84,10 @@ public class Quest {
         return hidden;
     }
 
+    public boolean requiresUnlock() {
+        return requiresUnlock;
+    }
+
     public int getSortOrder() {
         return sortOrder;
     }
@@ -127,6 +133,7 @@ public class Quest {
         private final List<QuestReward> rewards = new ArrayList<>();
         private boolean autoActivate = false;
         private boolean hidden = false;
+        private boolean requiresUnlock = false;
         private int sortOrder = 0;
 
         private Builder(String questLine, String id) {
@@ -186,6 +193,11 @@ public class Quest {
 
         public Builder hidden(boolean hidden) {
             this.hidden = hidden;
+            return this;
+        }
+
+        public Builder requiresUnlock(boolean requiresUnlock) {
+            this.requiresUnlock = requiresUnlock;
             return this;
         }
 

@@ -39,7 +39,7 @@ public class BoostManager extends SavedData {
     /** Einmaliger Flag, damit wir Config-Daten nicht jedes Mal neu einlesen. */
     private boolean dimLoadedFromConfig = false;
 
-    private static final boolean DEBUG_DIM = true; // Bei Bedarf auf false setzen
+    private static final boolean DEBUG_DIM = false; // Bei Bedarf auf true setzen
 
     /** 1.21.1-Weg: Factory + computeIfAbsent(factory, key). */
     public static BoostManager get(MinecraftServer server) {

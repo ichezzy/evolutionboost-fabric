@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "evolutionboost",
-  "version": "0.1.0",
+  "version": "${version}",
   "name": "Evolution Boost",
   "description": "Server mod exclusively for the Cobbled Evolution modpack and server.",
   "authors": ["ichezzy"],

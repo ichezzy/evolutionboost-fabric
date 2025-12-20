@@ -67,7 +67,7 @@ public final class EvolutionBoostConfig {
     public boolean shinyCharmEnabled = true;
 
     /** Multiplikator für Shiny-Chance wenn Charm in der Nähe (z.B. 2.0 = doppelte Chance) */
-    public double shinyCharmMultiplier = 100.0;
+    public double shinyCharmMultiplier = 2.0;
 
     /** Radius in Blöcken, in dem der Charm wirkt */
     public double shinyCharmRadius = 64.0;
@@ -140,7 +140,7 @@ public final class EvolutionBoostConfig {
             INSTANCE.shinyBaseOdds = 8192;
         }
         if (INSTANCE.shinyCharmMultiplier <= 0) {
-            INSTANCE.shinyCharmMultiplier = 100.0;
+            INSTANCE.shinyCharmMultiplier = 2.0;
         }
         if (INSTANCE.shinyCharmRadius <= 0) {
             INSTANCE.shinyCharmRadius = 64.0;
@@ -188,7 +188,7 @@ public final class EvolutionBoostConfig {
 
         // Shiny Charm
         c.shinyCharmEnabled = true;
-        c.shinyCharmMultiplier = 100.0;
+        c.shinyCharmMultiplier = 2.0;
         c.shinyCharmRadius = 64.0;
 
         // Maps

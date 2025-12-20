@@ -60,10 +60,11 @@ public class PlayerQuestData {
     }
 
     /**
-     * Prüft ob eine Quest aktiv ist.
+     * Prüft ob eine Quest aktiv ist (ACTIVE oder READY_TO_COMPLETE).
      */
     public boolean isActive(String questId) {
-        return getStatus(questId) == QuestStatus.ACTIVE;
+        QuestStatus status = getStatus(questId);
+        return status == QuestStatus.ACTIVE || status == QuestStatus.READY_TO_COMPLETE;
     }
 
     // ==================== Objective Progress ====================
@@ -121,12 +122,13 @@ public class PlayerQuestData {
     // ==================== Active Quests ====================
 
     /**
-     * Holt alle aktiven Quest-IDs.
+     * Holt alle aktiven Quest-IDs (ACTIVE und READY_TO_COMPLETE).
      */
     public Set<String> getActiveQuests() {
         Set<String> active = new HashSet<>();
         for (Map.Entry<String, QuestProgress> entry : questProgress.entrySet()) {
-            if (entry.getValue().status == QuestStatus.ACTIVE) {
+            QuestStatus status = entry.getValue().status;
+            if (status == QuestStatus.ACTIVE || status == QuestStatus.READY_TO_COMPLETE) {
                 active.add(entry.getKey());
             }
         }
@@ -134,16 +136,23 @@ public class PlayerQuestData {
     }
 
     /**
+     * Holt alle Quest-IDs mit einem bestimmten Status.
+     */
+    public Set<String> getQuestsByStatus(QuestStatus targetStatus) {
+        Set<String> result = new HashSet<>();
+        for (Map.Entry<String, QuestProgress> entry : questProgress.entrySet()) {
+            if (entry.getValue().status == targetStatus) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
+    }
+
+    /**
      * Holt alle abgeschlossenen Quest-IDs.
      */
     public Set<String> getCompletedQuests() {
-        Set<String> completed = new HashSet<>();
-        for (Map.Entry<String, QuestProgress> entry : questProgress.entrySet()) {
-            if (entry.getValue().status == QuestStatus.COMPLETED) {
-                completed.add(entry.getKey());
-            }
-        }
-        return completed;
+        return getQuestsByStatus(QuestStatus.COMPLETED);
     }
 
     /**

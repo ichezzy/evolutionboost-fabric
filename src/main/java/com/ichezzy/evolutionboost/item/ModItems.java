@@ -1,9 +1,11 @@
 package com.ichezzy.evolutionboost.item;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.block.ModBlocks;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
 
@@ -186,6 +188,12 @@ public final class ModItems {
             new ChristmasSackItem(new Item.Properties().stacksTo(64).rarity(Rarity.RARE))
     );
 
+    public static final Item CHRISTMAS25_MEDAL = register(
+            "christmas25_medal",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
+                    "tooltip.evolutionboost.christmas25_medal")
+    );
+
     public static final Item CHRISTMAS_SWEATER_BLUE = register(
             "christmas_sweater_blue",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
@@ -315,8 +323,7 @@ public final class ModItems {
     // ---- Safari / Voucher (Platzhalter) ----
     public static final Item SHINY_CHARM = register(
             "shiny_charm",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.shiny_charm")
+            new ShinyCharmItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
     );
 
     // FUNKTIONALES Ticket (60 Minuten)
@@ -360,6 +367,12 @@ public final class ModItems {
             "event_voucher_ev",
             new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
                     "tooltip.evolutionboost.voucher_ev")
+    );
+
+    // ---- Blocks as Items ----
+    public static final Item SPIRIT_ALTAR = register(
+            "spirit_altar",
+            new BlockItem(ModBlocks.SPIRIT_ALTAR, new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
     );
 
     private static Item register(String path, Item item) {

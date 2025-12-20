@@ -162,6 +162,16 @@ public class QuestObjective {
         return true; // Kein Filter = alles matched
     }
 
+    /**
+     * Prüft ob Items bei Quest-Abgabe konsumiert werden sollen.
+     * Default: true (Items werden entfernt)
+     * Kann über Filter "consume": false deaktiviert werden.
+     */
+    public boolean shouldConsumeItems() {
+        Boolean consume = getFilterBoolean("consume");
+        return consume == null || consume; // Default = true
+    }
+
     @Override
     public String toString() {
         return String.format("QuestObjective{id='%s', type=%s, target=%d}", id, type, target);

@@ -18,7 +18,7 @@ public final class ModItemGroup {
                 ResourceLocation.fromNamespaceAndPath(EvolutionBoost.MOD_ID, "main"),
                 // 1.21+: Row + column erforderlich
                 CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
-                        .icon(() -> new ItemStack(ModItems.EVOLUTION_COIN_GOLD))
+                        .icon(() -> new ItemStack(ModItems.EVOLUTION_COIN_PLATINUM))
                         .title(Component.translatable("itemGroup." + EvolutionBoost.MOD_ID + ".main"))
                         .displayItems((parameters, output) -> {
                             // Coins
@@ -76,6 +76,7 @@ public final class ModItemGroup {
                             output.accept(ModItems.SPIRIT_DEW);
                             output.accept(ModItems.SPIRIT_DEW_SHARDS);
                             output.accept(ModItems.WIND_UP_KEY);
+                            output.accept(ModItems.CHRISTMAS25_MEDAL);
 
                             // Tickets & Voucher
                             output.accept(ModItems.SAFARI_TICKET);
@@ -86,6 +87,9 @@ public final class ModItemGroup {
                             output.accept(ModItems.EVENT_VOUCHER_SHINY);
                             output.accept(ModItems.EVENT_VOUCHER_DROP);
                             output.accept(ModItems.EVENT_VOUCHER_EV);
+
+                            // Blocks
+                            output.accept(ModItems.SPIRIT_ALTAR);
                         })
                         .build()
         );

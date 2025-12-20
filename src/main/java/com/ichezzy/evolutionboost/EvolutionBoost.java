@@ -1,8 +1,10 @@
 package com.ichezzy.evolutionboost;
 
+import com.ichezzy.evolutionboost.block.ModBlocks;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.BoostCommand;
 import com.ichezzy.evolutionboost.command.EventCommand;
+import com.ichezzy.evolutionboost.command.HelpCommand;
 import com.ichezzy.evolutionboost.command.QuestCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.command.WeatherCommand;
@@ -35,6 +37,8 @@ import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
+
 public class EvolutionBoost implements ModInitializer {
     public static final String MOD_ID = "evolutionboost";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -47,7 +51,8 @@ public class EvolutionBoost implements ModInitializer {
         // S2C: Dim-Boost-HUD (schickt pro BoostType den Dimensional-Multiplikator)
         PayloadTypeRegistry.playS2C().register(DimBoostHudPayload.TYPE, DimBoostHudPayload.CODEC);
 
-        // ---- Items & Creative Tab ----
+        // ---- Blocks & Items & Creative Tab ----
+        ModBlocks.registerAll();
         ModItems.registerAll();
         ModItemGroup.register();
 
@@ -64,6 +69,7 @@ public class EvolutionBoost implements ModInitializer {
                  net.minecraft.commands.Commands.CommandSelection env) -> {
 
                     // Jeder Command registriert sich unter /evolutionboost UND /eb
+                    HelpCommand.register(d);
                     RewardCommand.register(d);
                     BoostCommand.register(d);
                     EventCommand.register(d);
@@ -108,11 +114,36 @@ public class EvolutionBoost implements ModInitializer {
         // ---- Join-Hinweise ----
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler != null ? handler.player : null;
-            if (player != null) RewardManager.onPlayerJoin(player);
+            if (player != null) {
+                RewardManager.onPlayerJoin(player);
+                
+                // Quest-Benachrichtigung mit 2 Sekunden Verzögerung
+                final UUID playerId = player.getUUID();
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        Thread.sleep(2000); // 2 Sekunden warten
+                        server.execute(() -> {
+                            ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
+                            if (onlinePlayer != null) {
+                                QuestManager.get().notifyAvailableQuests(onlinePlayer);
+                            }
+                        });
+                    } catch (InterruptedException ignored) {}
+                });
+            }
         });
 
         // ---- Tick ----
-        ServerTickEvents.END_SERVER_TICK.register(server -> BoostManager.get(server).tick(server));
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            BoostManager.get(server).tick(server);
+            
+            // Quest Item Check alle 2 Sekunden (40 Ticks)
+            if (server.getTickCount() % 40 == 0) {
+                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                    QuestItemHook.checkInventoryForQuests(player);
+                }
+            }
+        });
     }
 
     private static void safeUnregister(MinecraftServer server) {
