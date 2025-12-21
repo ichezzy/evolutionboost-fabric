@@ -25,6 +25,7 @@ import com.ichezzy.evolutionboost.weather.ChristmasWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -32,8 +33,10 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,6 +134,19 @@ public class EvolutionBoost implements ModInitializer {
                     } catch (InterruptedException ignored) {}
                 });
             }
+        });
+
+        // ---- Fallschaden in event:christmas deaktivieren ----
+        ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
+            // Prüfe ob es Fallschaden ist
+            if (source.is(DamageTypes.FALL)) {
+                // Prüfe ob Entity in der Christmas-Dimension ist
+                ResourceLocation dimId = entity.level().dimension().location();
+                if (dimId.getNamespace().equals("event") && dimId.getPath().equals("christmas")) {
+                    return false; // Schaden verhindern
+                }
+            }
+            return true; // Schaden erlauben
         });
 
         // ---- Tick ----
