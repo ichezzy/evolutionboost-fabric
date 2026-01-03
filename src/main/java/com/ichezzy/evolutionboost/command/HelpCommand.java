@@ -28,7 +28,9 @@ public final class HelpCommand {
                 .then(Commands.literal("weather")
                         .executes(ctx -> showWeatherHelp(ctx.getSource())))
                 .then(Commands.literal("quest")
-                        .executes(ctx -> showQuestHelp(ctx.getSource())));
+                        .executes(ctx -> showQuestHelp(ctx.getSource())))
+                .then(Commands.literal("dex")
+                        .executes(ctx -> showDexHelp(ctx.getSource())));
 
         d.register(Commands.literal("evolutionboost").then(helpTree));
         d.register(Commands.literal("eb").then(helpTree.build()));
@@ -75,6 +77,7 @@ public final class HelpCommand {
         if (hasPermission(src, "evolutionboost.weather", 2)) {
             src.sendSuccess(() -> Component.empty(), false);
             src.sendSuccess(() -> section("Weather Commands").append(clickable(" [details]", "/eb help weather", "Click for weather help")), false);
+            sendCmd(src, "/eb weather christmas enable/disable", "Toggle weather system", "evolutionboost.weather");
             sendCmd(src, "/eb weather christmas storm on/off", "Toggle blizzard", "evolutionboost.weather");
             sendCmd(src, "/eb weather christmas auto on/off", "Toggle auto-cycle", "evolutionboost.weather");
         }
@@ -86,6 +89,19 @@ public final class HelpCommand {
             sendCmd(src, "/eb quest <line> <id> activate <player>", "Activate quest", "evolutionboost.quest.admin");
             sendCmd(src, "/eb quest <line> <id> complete <player>", "Complete quest", "evolutionboost.quest.admin");
         }
+
+        // Pokédex Rewards (everyone can see)
+        src.sendSuccess(() -> Component.empty(), false);
+        src.sendSuccess(() -> section("Pokédex Commands").append(clickable(" [details]", "/eb help dex", "Click for dex help")), false);
+        sendCmd(src, "/eb dex info", "Show your Pokédex progress", null);
+        sendCmd(src, "/eb dex claim <milestone>", "Claim a milestone reward", null);
+        sendCmd(src, "/eb dex list", "List all milestones", null);
+
+        // Notifications (everyone can see)
+        src.sendSuccess(() -> Component.empty(), false);
+        src.sendSuccess(() -> section("Notifications"), false);
+        sendCmd(src, "/eb notifications", "Show notification settings", null);
+        sendCmd(src, "/eb notifications on/off <type>", "Toggle notifications (all/rewards/dex/quests)", null);
 
         src.sendSuccess(() -> Component.empty(), false);
         src.sendSuccess(() -> footer(), false);
@@ -164,22 +180,33 @@ public final class HelpCommand {
     private static int showWeatherHelp(CommandSourceStack src) {
         src.sendSuccess(() -> header("Weather Commands"), false);
 
-        src.sendSuccess(() -> section("Christmas Weather"), false);
+        src.sendSuccess(() -> section("System Control"), false);
+        sendCmdDetail(src, "/eb weather christmas enable",
+                "Enable the Christmas weather system",
+                "Required before using storm or auto commands");
+
+        sendCmdDetail(src, "/eb weather christmas disable",
+                "Disable the Christmas weather system completely",
+                "Saves performance when event is not active");
+
+        src.sendSuccess(() -> section("Storm Control"), false);
         sendCmdDetail(src, "/eb weather christmas storm on",
                 "Start a blizzard immediately",
                 "Players outside will freeze and take damage");
 
         sendCmdDetail(src, "/eb weather christmas storm off", "Stop the current blizzard");
 
+        src.sendSuccess(() -> section("Automatic Cycle"), false);
         sendCmdDetail(src, "/eb weather christmas auto on",
                 "Enable automatic blizzard cycle",
-                "Blizzards occur every ~60 minutes");
+                "Blizzards occur based on config (default: every 60 min)");
 
         sendCmdDetail(src, "/eb weather christmas auto off", "Disable automatic blizzard cycle");
 
-        sendCmdDetail(src, "/eb weather christmas status", "Show current weather status");
+        src.sendSuccess(() -> section("Information"), false);
+        sendCmdDetail(src, "/eb weather christmas status", "Show current weather status and settings");
 
-        sendCmdDetail(src, "/eb weather christmas init", "Initialize base Christmas boosts");
+        sendCmdDetail(src, "/eb weather christmas init", "Initialize base Christmas boosts manually");
 
         src.sendSuccess(() -> footer(), false);
         return 1;
@@ -214,6 +241,49 @@ public final class HelpCommand {
 
             sendCmdDetail(src, "/eb quest <line> <id> progress <player> <obj> <amount>",
                     "Manually add progress to an objective");
+        }
+
+        src.sendSuccess(() -> footer(), false);
+        return 1;
+    }
+
+    private static int showDexHelp(CommandSourceStack src) {
+        src.sendSuccess(() -> header("Pokédex Commands"), false);
+
+        src.sendSuccess(() -> section("Player Commands"), false);
+        sendCmdDetail(src, "/eb dex info",
+                "Show your Pokédex progress",
+                "Displays caught Pokémon count, percentage, and milestone status");
+
+        sendCmdDetail(src, "/eb dex claim <milestone>",
+                "Claim a milestone reward",
+                "You must have caught enough Pokémon to reach the milestone",
+                "Example: /eb dex claim bugcatcher");
+
+        sendCmdDetail(src, "/eb dex pokemon <milestone> <species> [shiny]",
+                "Claim your Pokémon reward with perfect IVs (Level 1)",
+                "Only base Pokémon allowed (no evolutions!)",
+                "Available after claiming item rewards for milestones at 25%, 50%, 75%, 100%",
+                "Example: /eb dex pokemon pokefan bulbasaur",
+                "Example: /eb dex pokemon acetrainer charmander true");
+
+        sendCmdDetail(src, "/eb dex list",
+                "List all available milestones",
+                "Shows percentage required and rewards for each milestone");
+
+        if (hasPermission(src, "evolutionboost.dex.admin", 2)) {
+            src.sendSuccess(() -> section("Admin Commands"), false);
+
+            sendCmdDetail(src, "/eb dex check <player>",
+                    "Check another player's Pokédex progress");
+
+            sendCmdDetail(src, "/eb dex reload",
+                    "Reload the dex_rewards.json config");
+
+            sendCmdDetail(src, "/eb dex reset <player> <type>",
+                    "Reset a player's claimed rewards",
+                    "Types: all (all rewards), pokemon (only Pokémon rewards), or <milestone_id>",
+                    "Note: Does NOT reset the Pokédex itself - only makes rewards claimable again");
         }
 
         src.sendSuccess(() -> footer(), false);

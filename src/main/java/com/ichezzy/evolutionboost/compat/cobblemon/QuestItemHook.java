@@ -1,4 +1,4 @@
-package com.ichezzy.evolutionboost.quest.hooks;
+package com.ichezzy.evolutionboost.compat.cobblemon;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.quest.PlayerQuestData;

@@ -3,7 +3,7 @@ package com.ichezzy.evolutionboost.weather;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
-import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
+import com.ichezzy.evolutionboost.configs.EventConfig;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -47,16 +47,12 @@ public final class ChristmasWeatherManager {
     private static StormState christmasState = StormState.IDLE;
     private static int christmasTicks = 0;
     private static int ticksSinceLastStorm = 0;
-    private static boolean autoStormEnabled = false;
     private static boolean christmasBoostsInitialized = false;
 
-    // Timing
+    // Timing - wird aus Config geladen
     private static final int PREPARE_TICKS = 20 * 30;       // 30 Sekunden Vorwarnung
-    private static final int STORM_DURATION_TICKS = 20 * 60 * 10;  // 10 Minuten Sturm
-    private static final int CALM_WARNING_TICKS = STORM_DURATION_TICKS - (20 * 30);  // 30 Sekunden vor Ende
-    private static final int AUTO_INTERVAL_TICKS = 20 * 60 * 60;   // 60 Minuten zwischen Stürmen
 
-    private static final int EFFECT_INTERVAL = 20 * 2;      // Alle 2 Sekunden Effekte
+    private static final int EFFECT_INTERVAL = 20 * 3;      // Alle 3 Sekunden Effekte (Performance-optimiert)
     private static final int DAMAGE_INTERVAL = 20 * 3;      // Alle 3 Sekunden Schaden wenn voll eingefroren
 
     // Bossbar für den Sturm
@@ -66,7 +62,7 @@ public final class ChristmasWeatherManager {
 
     public static void init() {
         ServerTickEvents.END_SERVER_TICK.register(ChristmasWeatherManager::tickServer);
-        EvolutionBoost.LOGGER.info("[weather] EventWeatherManager initialized.");
+        EvolutionBoost.LOGGER.info("[weather] ChristmasWeatherManager initialized.");
     }
 
     /* =========================================================
@@ -76,6 +72,12 @@ public final class ChristmasWeatherManager {
     /** /eb weather christmas storm on */
     public static void startChristmasStorm(MinecraftServer server) {
         if (server == null) return;
+
+        // Weather muss aktiviert sein
+        if (!EventConfig.isChristmasWeatherEnabled()) {
+            EvolutionBoost.LOGGER.warn("[weather] Cannot start storm - christmas weather is disabled in config!");
+            return;
+        }
 
         ServerLevel level = getChristmasLevel(server);
         if (level == null) {
@@ -116,13 +118,23 @@ public final class ChristmasWeatherManager {
 
     /** /eb weather christmas auto on */
     public static void enableAutoStorm(MinecraftServer server) {
-        autoStormEnabled = true;
+        // Weather muss aktiviert sein
+        if (!EventConfig.isChristmasWeatherEnabled()) {
+            EvolutionBoost.LOGGER.warn("[weather] Cannot enable auto storm - christmas weather is disabled!");
+            return;
+        }
+        
+        EventConfig.setChristmasAutoStorm(true);
+        
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        int autoIntervalTicks = cfg.stormEveryMinutes * 20 * 60;
+        
         // Zufällige Startzeit (zwischen 0 und 30 Minuten warten bis zum ersten Sturm)
-        ticksSinceLastStorm = RANDOM.nextInt(AUTO_INTERVAL_TICKS / 2);
+        ticksSinceLastStorm = RANDOM.nextInt(autoIntervalTicks / 2);
 
         ensureBaseBoosts(server);
 
-        int minutesUntilFirst = (AUTO_INTERVAL_TICKS - ticksSinceLastStorm) / (20 * 60);
+        int minutesUntilFirst = (autoIntervalTicks - ticksSinceLastStorm) / (20 * 60);
 
         broadcastToChristmas(server,
                 Component.literal("⚙ ").withStyle(ChatFormatting.GOLD)
@@ -135,7 +147,7 @@ public final class ChristmasWeatherManager {
 
     /** /eb weather christmas auto off */
     public static void disableAutoStorm(MinecraftServer server) {
-        autoStormEnabled = false;
+        EventConfig.setChristmasAutoStorm(false);
 
         broadcastToChristmas(server,
                 Component.literal("⚙ ").withStyle(ChatFormatting.GOLD)
@@ -147,40 +159,51 @@ public final class ChristmasWeatherManager {
 
     /** /eb weather christmas init */
     public static void initializeChristmasBoosts(MinecraftServer server) {
+        if (!EventConfig.isChristmasWeatherEnabled()) {
+            EvolutionBoost.LOGGER.warn("[weather] Cannot initialize boosts - christmas weather is disabled!");
+            return;
+        }
+        
         applyBaseBoosts(server);
 
-        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
 
         broadcastToChristmas(server,
                 Component.literal("✨ ").withStyle(ChatFormatting.GOLD)
-                        .append(Component.literal("Christmas boosts initialized: ALL x" + cfg.christmasBaseMultiplier)
+                        .append(Component.literal("Christmas boosts initialized: ALL x" + cfg.baseMultiplier)
                                 .withStyle(ChatFormatting.GREEN))
         );
     }
 
     /** /eb weather christmas status */
     public static String getStatus() {
-        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+        if (!EventConfig.isChristmasWeatherEnabled()) {
+            return "Christmas Weather: DISABLED (no performance impact)";
+        }
+        
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        int stormDurationTicks = cfg.stormDurationMinutes * 20 * 60;
+        int autoIntervalTicks = cfg.stormEveryMinutes * 20 * 60;
 
         StringBuilder sb = new StringBuilder();
         sb.append("State: ").append(christmasState.name());
 
         if (christmasState == StormState.ACTIVE) {
-            int remaining = STORM_DURATION_TICKS - christmasTicks;
+            int remaining = stormDurationTicks - christmasTicks;
             sb.append(" (").append(formatTicks(remaining)).append(" remaining)");
-            sb.append(" | Boosts: ALL x").append(cfg.christmasStormMultiplier);
+            sb.append(" | Boosts: ALL x").append(cfg.stormMultiplier);
         } else if (christmasState == StormState.PREPARE) {
             int remaining = PREPARE_TICKS - christmasTicks;
             sb.append(" (storm starts in ").append(formatTicks(remaining)).append(")");
         } else {
-            sb.append(" | Boosts: ALL x").append(cfg.christmasBaseMultiplier);
-            if (autoStormEnabled) {
-                int remaining = AUTO_INTERVAL_TICKS - ticksSinceLastStorm;
+            sb.append(" | Boosts: ALL x").append(cfg.baseMultiplier);
+            if (cfg.autoStormEnabled) {
+                int remaining = autoIntervalTicks - ticksSinceLastStorm;
                 sb.append(" | Next storm in ~").append(formatTicks(remaining));
             }
         }
 
-        sb.append(" | Auto: ").append(autoStormEnabled ? "ON" : "OFF");
+        sb.append(" | Auto: ").append(cfg.autoStormEnabled ? "ON" : "OFF");
 
         return sb.toString();
     }
@@ -196,11 +219,19 @@ public final class ChristmasWeatherManager {
     private static void tickServer(MinecraftServer server) {
         if (server == null) return;
 
+        // PERFORMANCE: Komplett überspringen wenn Weather deaktiviert
+        if (!EventConfig.isChristmasWeatherEnabled()) {
+            return;
+        }
+
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        int autoIntervalTicks = cfg.stormEveryMinutes * 20 * 60;
+
         // Auto-Zyklus (mit etwas Zufälligkeit)
-        if (autoStormEnabled && christmasState == StormState.IDLE) {
+        if (cfg.autoStormEnabled && christmasState == StormState.IDLE) {
             ticksSinceLastStorm++;
 
-            if (ticksSinceLastStorm >= AUTO_INTERVAL_TICKS) {
+            if (ticksSinceLastStorm >= autoIntervalTicks) {
                 startChristmasStorm(server);
                 ticksSinceLastStorm = 0;
             }
@@ -246,7 +277,7 @@ public final class ChristmasWeatherManager {
             applyStormBoosts(server);
             createBossbar(server);
 
-            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
+            EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
 
             broadcastToChristmas(server,
                     Component.literal("❄❄❄ ").withStyle(ChatFormatting.WHITE)
@@ -254,25 +285,31 @@ public final class ChristmasWeatherManager {
             );
             broadcastToChristmas(server,
                     Component.literal("   ✨ ALL BOOSTS now x").withStyle(ChatFormatting.GOLD)
-                            .append(Component.literal(String.valueOf(cfg.christmasStormMultiplier)).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
-                            .append(Component.literal(" (Shiny, XP, IV) for 10 minutes!").withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal(String.valueOf(cfg.stormMultiplier)).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+                            .append(Component.literal(" (Shiny, XP, IV) for " + cfg.stormDurationMinutes + " minutes!").withStyle(ChatFormatting.GRAY))
             );
 
-            EvolutionBoost.LOGGER.info("[weather] Christmas storm ACTIVE. Duration: 10 minutes.");
+            EvolutionBoost.LOGGER.info("[weather] Christmas storm ACTIVE. Duration: {} minutes.", cfg.stormDurationMinutes);
         }
     }
 
     private static void tickChristmasActive(MinecraftServer server) {
-        // Effekte anwenden
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        int stormDurationTicks = cfg.stormDurationMinutes * 20 * 60;
+        int calmWarningTicks = stormDurationTicks - (20 * 30); // 30 Sekunden vor Ende
+        
+        // Effekte anwenden (alle 2 Sekunden)
         if (christmasTicks % EFFECT_INTERVAL == 0) {
             applyChristmasStormEffects(server);
         }
 
-        // Bossbar aktualisieren
-        updateBossbar(server);
+        // Bossbar aktualisieren (nur jede Sekunde = 20 Ticks für bessere Performance)
+        if (christmasTicks % 20 == 0) {
+            updateBossbar(server);
+        }
 
         // 30 Sekunden vor Ende: Ankündigung
-        if (christmasTicks == CALM_WARNING_TICKS) {
+        if (christmasTicks == calmWarningTicks) {
             broadcastToChristmas(server,
                     Component.literal("❄ ").withStyle(ChatFormatting.WHITE)
                             .append(Component.literal("The blizzard is beginning to calm down... 30 seconds remaining.").withStyle(ChatFormatting.AQUA))
@@ -280,10 +317,8 @@ public final class ChristmasWeatherManager {
             EvolutionBoost.LOGGER.info("[weather] Christmas storm CALMING phase (30s remaining).");
         }
 
-        // Ende nach 10 Minuten
-        if (christmasTicks >= STORM_DURATION_TICKS) {
-            EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-
+        // Ende nach X Minuten
+        if (christmasTicks >= stormDurationTicks) {
             applyBaseBoosts(server);
             clearChristmasWeather(server);
             removeBossbar();
@@ -297,7 +332,7 @@ public final class ChristmasWeatherManager {
             );
             broadcastToChristmas(server,
                     Component.literal("   ✨ Boosts back to x").withStyle(ChatFormatting.GOLD)
-                            .append(Component.literal(String.valueOf(cfg.christmasBaseMultiplier)).withStyle(ChatFormatting.GREEN))
+                            .append(Component.literal(String.valueOf(cfg.baseMultiplier)).withStyle(ChatFormatting.GREEN))
             );
 
             EvolutionBoost.LOGGER.info("[weather] Christmas storm ended. Base boosts restored.");
@@ -333,12 +368,15 @@ public final class ChristmasWeatherManager {
     private static void updateBossbar(MinecraftServer server) {
         if (stormBossbar == null) return;
 
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        int stormDurationTicks = cfg.stormDurationMinutes * 20 * 60;
+
         // Progress berechnen (1.0 = voll, 0.0 = leer)
-        float progress = 1.0f - ((float) christmasTicks / (float) STORM_DURATION_TICKS);
+        float progress = 1.0f - ((float) christmasTicks / (float) stormDurationTicks);
         stormBossbar.setProgress(Math.max(0f, Math.min(1f, progress)));
 
         // Verbleibende Zeit im Titel
-        int remainingSeconds = (STORM_DURATION_TICKS - christmasTicks) / 20;
+        int remainingSeconds = (stormDurationTicks - christmasTicks) / 20;
         int minutes = remainingSeconds / 60;
         int seconds = remainingSeconds % 60;
 
@@ -378,8 +416,8 @@ public final class ChristmasWeatherManager {
        ========================================================= */
 
     private static void applyBaseBoosts(MinecraftServer server) {
-        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-        double baseMult = cfg.christmasBaseMultiplier;
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        double baseMult = cfg.baseMultiplier;
 
         BoostManager bm = BoostManager.get(server);
 
@@ -392,8 +430,8 @@ public final class ChristmasWeatherManager {
     }
 
     private static void applyStormBoosts(MinecraftServer server) {
-        EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
-        double stormMult = cfg.christmasStormMultiplier;
+        EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+        double stormMult = cfg.stormMultiplier;
 
         BoostManager bm = BoostManager.get(server);
 
@@ -427,8 +465,10 @@ public final class ChristmasWeatherManager {
         }
 
         if (storm) {
+            EventConfig.ChristmasSettings cfg = EventConfig.get().christmas;
+            int stormDurationTicks = cfg.stormDurationMinutes * 20 * 60;
             // Sturm setzen: rain + thunder für die Dauer + etwas Puffer
-            int duration = STORM_DURATION_TICKS + (20 * 60 * 5); // +5 Minuten Puffer
+            int duration = stormDurationTicks + (20 * 60 * 5); // +5 Minuten Puffer
             level.setWeatherParameters(0, duration, true, true);
             EvolutionBoost.LOGGER.info("[weather] Weather set to STORM (rain+thunder).");
         } else {
@@ -545,13 +585,19 @@ public final class ChristmasWeatherManager {
 
     /**
      * Prüft ob eine Wärmequelle in der Nähe ist (inkl. Torches, Lanterns)
+     * 
+     * Performance-Hinweis: Radius 4 prüft 729 Blöcke (9³), was akzeptabel ist.
+     * Bei Radius 6 wären es 2197 Blöcke (13³) - zu viel!
      */
     private static boolean isNearHeatSource(ServerLevel level, BlockPos center, int radius) {
+        // Limitiere Radius für Performance
+        int safeRadius = Math.min(radius, 4);
+        
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
 
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dy = -radius; dy <= radius; dy++) {
-                for (int dz = -radius; dz <= radius; dz++) {
+        for (int dx = -safeRadius; dx <= safeRadius; dx++) {
+            for (int dy = -safeRadius; dy <= safeRadius; dy++) {
+                for (int dz = -safeRadius; dz <= safeRadius; dz++) {
                     cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
                     var state = level.getBlockState(cursor);
 

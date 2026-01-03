@@ -52,7 +52,7 @@ public final class EvolutionBoostConfig {
     // ==================== General Settings ====================
 
     /** Maximale erlaubte Boost-Multiplikation (z. B. 10.0) */
-    public double maxBoostMultiplier = 100.0;
+    public double maxBoostMultiplier = 5.0;
 
     /**
      * Basischance für Shiny-Rolls (1 in shinyBaseOdds).
@@ -72,19 +72,9 @@ public final class EvolutionBoostConfig {
     /** Radius in Blöcken, in dem der Charm wirkt */
     public double shinyCharmRadius = 64.0;
 
-    // ==================== Christmas Event Settings ====================
-
-    /** Basis-Multiplikator für Christmas (ohne Sturm) - gilt für SHINY, XP, IV */
-    public double christmasBaseMultiplier = 1.5;
-
-    /** Multiplikator während des Sturms - gilt für SHINY, XP, IV */
-    public double christmasStormMultiplier = 2.0;
-
-    /** Sturm-Intervall in Minuten (wenn Auto aktiviert) */
-    public int christmasStormEveryMinutes = 60;
-
-    /** Sturm-Dauer in Minuten */
-    public int christmasStormDurationMinutes = 6;
+    // ==================== NOTE: Christmas Settings moved to event.json ====================
+    // Christmas settings are now in EventConfig (config/evolutionboost/event.json)
+    // See: EventConfig.ChristmasSettings
 
     // ==================== Singleton & IO ====================
 
@@ -134,7 +124,7 @@ public final class EvolutionBoostConfig {
 
         // Fallbacks für alte Configs ohne neue Felder
         if (INSTANCE.maxBoostMultiplier <= 0) {
-            INSTANCE.maxBoostMultiplier = 10.0;
+            INSTANCE.maxBoostMultiplier = 5.0;
         }
         if (INSTANCE.shinyBaseOdds <= 0) {
             INSTANCE.shinyBaseOdds = 8192;
@@ -150,18 +140,6 @@ public final class EvolutionBoostConfig {
         }
         if (INSTANCE.eventSpawns == null) {
             INSTANCE.eventSpawns = new LinkedHashMap<>();
-        }
-        if (INSTANCE.christmasBaseMultiplier <= 0) {
-            INSTANCE.christmasBaseMultiplier = 1.5;
-        }
-        if (INSTANCE.christmasStormMultiplier <= 0) {
-            INSTANCE.christmasStormMultiplier = 2.0;
-        }
-        if (INSTANCE.christmasStormEveryMinutes <= 0) {
-            INSTANCE.christmasStormEveryMinutes = 60;
-        }
-        if (INSTANCE.christmasStormDurationMinutes <= 0) {
-            INSTANCE.christmasStormDurationMinutes = 6;
         }
 
         return INSTANCE;
@@ -183,7 +161,7 @@ public final class EvolutionBoostConfig {
         EvolutionBoostConfig c = new EvolutionBoostConfig();
 
         // General Settings
-        c.maxBoostMultiplier = 100.0;
+        c.maxBoostMultiplier = 5.0;
         c.shinyBaseOdds = 8192;
 
         // Shiny Charm
@@ -195,11 +173,7 @@ public final class EvolutionBoostConfig {
         c.dimensionBoosts = new LinkedHashMap<>();
         c.eventSpawns = new LinkedHashMap<>();
 
-        // Christmas Settings
-        c.christmasBaseMultiplier = 1.5;
-        c.christmasStormMultiplier = 2.0;
-        c.christmasStormEveryMinutes = 60;
-        c.christmasStormDurationMinutes = 6;
+        // Note: Christmas settings moved to EventConfig (event.json)
 
         return c;
     }

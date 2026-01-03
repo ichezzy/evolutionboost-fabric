@@ -63,7 +63,7 @@ public final class EvolutionBoostClient implements ClientModInitializer {
                 }
         );
 
-        // --- HUD links rendern (ca. 1/4 Bildschirmhöhe von oben) ---
+        // --- HUD links rendern (Position passt sich an GUI-Scale an) ---
         HudRenderCallback.EVENT.register((GuiGraphics graphics, DeltaTracker deltaTracker) -> {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null) return;
@@ -71,10 +71,11 @@ public final class EvolutionBoostClient implements ClientModInitializer {
             // Nicht anzeigen wenn F3 Debug-Screen offen ist
             if (mc.getDebugOverlay().showDebugScreen()) return;
 
-            // Position: links, bei 1/4 der Bildschirmhöhe (unterhalb Cobblemon Party)
+            // Position: links, bei ca. 9% der Bildschirmhöhe (unterhalb Cobblemon Party)
+            // Dies sorgt dafür, dass die Position bei allen GUI-Scales konsistent ist
             int screenHeight = mc.getWindow().getGuiScaledHeight();
             int x = 16;
-            int y = 50;
+            int y = Math.max(30, (int)(screenHeight * 0.093)); // ~9.3% von oben, min 30
 
             for (BoostType type : BoostType.values()) {
                 double dim = DIM_MULTS.getOrDefault(type, 1.0D);

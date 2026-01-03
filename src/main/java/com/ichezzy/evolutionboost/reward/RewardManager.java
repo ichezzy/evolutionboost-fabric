@@ -130,11 +130,17 @@ public final class RewardManager {
 
     /* ================== Public API ================== */
 
-    /** Login-Hinweise. */
+    /** Login-Hinweise - minimalistisch. */
     public static void onPlayerJoin(ServerPlayer p) {
         UUID id = p.getUUID();
         STATE.computeIfAbsent(id, k -> new PlayerRewardState());
         LAST_NAMES.put(id, safeName(p));
+
+        // Check notification setting
+        if (!com.ichezzy.evolutionboost.configs.NotificationConfig.isEnabled(id, 
+                com.ichezzy.evolutionboost.configs.NotificationConfig.NotificationType.REWARDS)) {
+            return;
+        }
 
         boolean readyDaily   = isReady(p, RewardType.DAILY);
         boolean readyWeekly  = isReady(p, RewardType.WEEKLY);
@@ -143,59 +149,84 @@ public final class RewardManager {
         boolean readyStaff   = isEligibleMonthly(p, RewardType.MONTHLY_STAFF)   && isReady(p, RewardType.MONTHLY_STAFF);
 
         if (readyDaily || readyWeekly || readyDonator || readyGym || readyStaff) {
-            p.sendSystemMessage(
-                    Component.literal("[REWARDS] You have rewards to claim!")
-                            .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD)
-            );
-            p.sendSystemMessage(
-                    Component.literal("Tip: Use /eb rewards info  or  /eb rewards claim <type>")
-                            .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)
-            );
-        } else {
-            p.sendSystemMessage(
-                    Component.literal("[REWARDS] You currently have no rewards to claim.")
-                            .withStyle(ChatFormatting.GRAY)
-            );
+            // Build list of available rewards
+            List<String> available = new java.util.ArrayList<>();
+            if (readyDaily) available.add("Daily");
+            if (readyWeekly) available.add("Weekly");
+            if (readyDonator) available.add("Donator");
+            if (readyGym) available.add("Gym");
+            if (readyStaff) available.add("Staff");
+
+            p.sendSystemMessage(Component.literal("🎁 Rewards available: ")
+                    .withStyle(ChatFormatting.GOLD)
+                    .append(Component.literal(String.join(", ", available))
+                            .withStyle(ChatFormatting.GREEN)));
+            p.sendSystemMessage(Component.literal("   → /eb rewards info")
+                    .withStyle(ChatFormatting.GRAY));
         }
     }
 
-    /** Schöne Info-Ausgabe je Zeile/Farbe. */
+    /** Schöne Info-Ausgabe - minimalistisch. */
     public static void sendInfo(CommandSourceStack src, ServerPlayer p) {
+        src.sendSuccess(() -> Component.literal("🎁 Reward Status")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+
         sendOneInfo(src, p, RewardType.DAILY,  ChatFormatting.YELLOW, "Daily");
         sendOneInfo(src, p, RewardType.WEEKLY, ChatFormatting.AQUA,   "Weekly");
 
         if (isEligibleMonthly(p, RewardType.MONTHLY_DONATOR)) {
             DonatorTier tier = getDonatorTier(p);
             String label = switch (tier) {
-                case COPPER -> "Monthly (Donator Copper)";
-                case SILVER -> "Monthly (Donator Silver)";
-                case GOLD   -> "Monthly (Donator Gold)";
-                default     -> "Monthly (Donator)";
+                case COPPER -> "Donator (Copper)";
+                case SILVER -> "Donator (Silver)";
+                case GOLD   -> "Donator (Gold)";
+                default     -> "Donator";
             };
             sendOneInfo(src, p, RewardType.MONTHLY_DONATOR, ChatFormatting.LIGHT_PURPLE, label);
         } else {
-            src.sendSuccess(() -> Component.literal("Monthly (Donator): not eligible").withStyle(ChatFormatting.RED), false);
+            src.sendSuccess(() -> Component.literal("  ✗ Donator: ")
+                    .withStyle(ChatFormatting.DARK_GRAY)
+                    .append(Component.literal("not eligible")
+                            .withStyle(ChatFormatting.RED)), false);
         }
 
         if (isEligibleMonthly(p, RewardType.MONTHLY_GYM)) {
-            sendOneInfo(src, p, RewardType.MONTHLY_GYM, ChatFormatting.LIGHT_PURPLE, "Monthly (Gym)");
+            sendOneInfo(src, p, RewardType.MONTHLY_GYM, ChatFormatting.GREEN, "Gym Leader");
         } else {
-            src.sendSuccess(() -> Component.literal("Monthly (Gym): not eligible").withStyle(ChatFormatting.RED), false);
+            src.sendSuccess(() -> Component.literal("  ✗ Gym Leader: ")
+                    .withStyle(ChatFormatting.DARK_GRAY)
+                    .append(Component.literal("not eligible")
+                            .withStyle(ChatFormatting.RED)), false);
         }
 
         if (isEligibleMonthly(p, RewardType.MONTHLY_STAFF)) {
-            sendOneInfo(src, p, RewardType.MONTHLY_STAFF, ChatFormatting.GOLD, "Monthly (Staff)");
+            sendOneInfo(src, p, RewardType.MONTHLY_STAFF, ChatFormatting.GOLD, "Staff");
         } else {
-            src.sendSuccess(() -> Component.literal("Monthly (Staff): not eligible").withStyle(ChatFormatting.RED), false);
+            src.sendSuccess(() -> Component.literal("  ✗ Staff: ")
+                    .withStyle(ChatFormatting.DARK_GRAY)
+                    .append(Component.literal("not eligible")
+                            .withStyle(ChatFormatting.RED)), false);
         }
+
+        src.sendSuccess(() -> Component.literal(""), false);
+        src.sendSuccess(() -> Component.literal("Claim: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/eb rewards claim <type>")
+                        .withStyle(ChatFormatting.GREEN)), false);
     }
 
     private static void sendOneInfo(CommandSourceStack src, ServerPlayer p, RewardType t, ChatFormatting color, String label) {
         long sec = secondsUntilNext(p, t);
         if (sec == 0) {
-            src.sendSuccess(() -> Component.literal(label + ": ready now").withStyle(color, ChatFormatting.BOLD), false);
+            src.sendSuccess(() -> Component.literal("  ★ " + label + ": ")
+                    .withStyle(color)
+                    .append(Component.literal("READY")
+                            .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)), false);
         } else {
-            src.sendSuccess(() -> Component.literal(label + ": " + human(sec) + " until reset").withStyle(color), false);
+            src.sendSuccess(() -> Component.literal("  ○ " + label + ": ")
+                    .withStyle(ChatFormatting.GRAY)
+                    .append(Component.literal(human(sec))
+                            .withStyle(ChatFormatting.WHITE)), false);
         }
     }
 
@@ -694,20 +725,24 @@ public final class RewardManager {
         } else if ("staff".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_STAFF;
         } else {
-            src.sendSuccess(() -> Component.literal("[Rewards] Unknown role: " + roleKey)
+            src.sendSuccess(() -> Component.literal("❌ Unknown role: " + roleKey)
                     .withStyle(ChatFormatting.RED), false);
             return;
         }
 
         if (names.isEmpty()) {
-            src.sendSuccess(() -> Component.literal("[Rewards] No entries for '" + roleKey + "'.")
-                    .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
+            src.sendSuccess(() -> Component.literal("📋 " + roleKey + ": ")
+                    .withStyle(ChatFormatting.GOLD)
+                    .append(Component.literal("(empty)")
+                            .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)), false);
             return;
         }
 
         String joined = String.join(", ", names);
-        src.sendSuccess(() -> Component.literal("[Rewards] " + roleKey + ": " + joined)
-                .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
+        src.sendSuccess(() -> Component.literal("📋 " + roleKey + ": ")
+                .withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(joined)
+                        .withStyle(ChatFormatting.WHITE)), false);
     }
 
     /* ================== Interner State & Donator-Tier ================== */

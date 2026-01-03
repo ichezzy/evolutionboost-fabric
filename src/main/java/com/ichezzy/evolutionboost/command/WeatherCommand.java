@@ -1,5 +1,6 @@
 package com.ichezzy.evolutionboost.command;
 
+import com.ichezzy.evolutionboost.configs.EventConfig;
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.weather.ChristmasWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
@@ -19,9 +20,36 @@ public final class WeatherCommand {
                 ))
 
                 .then(Commands.literal("christmas")
+                        // /eb weather christmas enable|disable - Master-Schalter
+                        .then(Commands.literal("enable").executes(ctx -> {
+                            EventConfig.setChristmasWeatherEnabled(true);
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal("[Weather] Christmas weather system ENABLED.")
+                                            .withStyle(ChatFormatting.GREEN),
+                                    false
+                            );
+                            return 1;
+                        }))
+                        .then(Commands.literal("disable").executes(ctx -> {
+                            EventConfig.setChristmasWeatherEnabled(false);
+                            ChristmasWeatherManager.stopChristmasStorm(ctx.getSource().getServer());
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal("[Weather] Christmas weather system DISABLED. No performance impact.")
+                                            .withStyle(ChatFormatting.RED),
+                                    false
+                            );
+                            return 1;
+                        }))
+                        
                         // /eb weather christmas storm on|off
                         .then(Commands.literal("storm")
                                 .then(Commands.literal("on").executes(ctx -> {
+                                    if (!EventConfig.isChristmasWeatherEnabled()) {
+                                        ctx.getSource().sendFailure(
+                                                Component.literal("[Weather] Christmas weather is disabled! Use /eb weather christmas enable first.")
+                                        );
+                                        return 0;
+                                    }
                                     ChristmasWeatherManager.startChristmasStorm(ctx.getSource().getServer());
                                     ctx.getSource().sendSuccess(
                                             () -> Component.literal("[Weather] Christmas storm STARTED.")
@@ -44,6 +72,12 @@ public final class WeatherCommand {
                         // /eb weather christmas auto on|off
                         .then(Commands.literal("auto")
                                 .then(Commands.literal("on").executes(ctx -> {
+                                    if (!EventConfig.isChristmasWeatherEnabled()) {
+                                        ctx.getSource().sendFailure(
+                                                Component.literal("[Weather] Christmas weather is disabled! Use /eb weather christmas enable first.")
+                                        );
+                                        return 0;
+                                    }
                                     ChristmasWeatherManager.enableAutoStorm(ctx.getSource().getServer());
                                     ctx.getSource().sendSuccess(
                                             () -> Component.literal("[Weather] Auto storm cycle ENABLED.")
@@ -65,6 +99,12 @@ public final class WeatherCommand {
 
                         // /eb weather christmas init - Setzt Basis-Boosts
                         .then(Commands.literal("init").executes(ctx -> {
+                            if (!EventConfig.isChristmasWeatherEnabled()) {
+                                ctx.getSource().sendFailure(
+                                        Component.literal("[Weather] Christmas weather is disabled! Use /eb weather christmas enable first.")
+                                );
+                                return 0;
+                            }
                             ChristmasWeatherManager.initializeChristmasBoosts(ctx.getSource().getServer());
                             ctx.getSource().sendSuccess(
                                     () -> Component.literal("[Weather] Christmas boosts initialized.")

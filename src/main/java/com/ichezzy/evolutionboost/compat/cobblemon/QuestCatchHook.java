@@ -1,4 +1,4 @@
-package com.ichezzy.evolutionboost.quest.hooks;
+package com.ichezzy.evolutionboost.compat.cobblemon;
 
 import com.cobblemon.mod.common.api.Priority;
 import com.cobblemon.mod.common.api.events.CobblemonEvents;

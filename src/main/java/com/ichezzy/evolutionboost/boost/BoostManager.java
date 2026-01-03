@@ -1,6 +1,7 @@
 package com.ichezzy.evolutionboost.boost;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.DebugConfig;
 import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.HolderLookup;
@@ -38,8 +39,9 @@ public class BoostManager extends SavedData {
 
     /** Einmaliger Flag, damit wir Config-Daten nicht jedes Mal neu einlesen. */
     private boolean dimLoadedFromConfig = false;
-
-    private static final boolean DEBUG_DIM = false; // Bei Bedarf auf true setzen
+    
+    /** Tick-Counter für Bossbar-Updates (Performance-Optimierung) */
+    private int tickCounter = 0;
 
     /** 1.21.1-Weg: Factory + computeIfAbsent(factory, key). */
     public static BoostManager get(MinecraftServer server) {
@@ -187,7 +189,7 @@ public class BoostManager extends SavedData {
         }
         EvolutionBoostConfig.save();
 
-        if (DEBUG_DIM) {
+        if (DebugConfig.get().debugDimensionBoosts) {
             EvolutionBoost.LOGGER.info("[Boost][dim] Set dim boost dim={} type={} mult={}",
                     dim.location(), type, clamped);
         }
@@ -208,7 +210,7 @@ public class BoostManager extends SavedData {
             EvolutionBoostConfig.save();
         }
 
-        if (DEBUG_DIM) {
+        if (DebugConfig.get().debugDimensionBoosts) {
             EvolutionBoost.LOGGER.info("[Boost][dim] Cleared dim boost dim={} type={}", dim.location(), type);
         }
     }
@@ -223,7 +225,7 @@ public class BoostManager extends SavedData {
         cfg.dimensionBoosts.remove(dim.location().toString());
         EvolutionBoostConfig.save();
 
-        if (DEBUG_DIM) {
+        if (DebugConfig.get().debugDimensionBoosts) {
             EvolutionBoost.LOGGER.info("[Boost][dim] Cleared ALL dim boosts for dim={}", dim.location());
         }
     }
@@ -240,7 +242,7 @@ public class BoostManager extends SavedData {
         cfg.dimensionBoosts.clear();
         EvolutionBoostConfig.save();
 
-        if (DEBUG_DIM) {
+        if (DebugConfig.get().debugDimensionBoosts) {
             EvolutionBoost.LOGGER.info("[Boost][dim] Cleared all dimension boosts (all dimensions).");
         }
     }
@@ -262,7 +264,7 @@ public class BoostManager extends SavedData {
         }
 
         if (cfg.dimensionBoosts == null || cfg.dimensionBoosts.isEmpty()) {
-            if (DEBUG_DIM) {
+            if (DebugConfig.get().debugDimensionBoosts) {
                 EvolutionBoost.LOGGER.info("[Boost][dim] No dimension boosts in config (nothing to load).");
             }
             return;
@@ -301,7 +303,7 @@ public class BoostManager extends SavedData {
             }
         }
 
-        if (DEBUG_DIM) {
+        if (DebugConfig.get().debugDimensionBoosts) {
             EvolutionBoost.LOGGER.info("[Boost][dim] Loaded {} dimension entries across {} dimensions from config.",
                     countEntries, countDims);
         }
@@ -330,7 +332,7 @@ public class BoostManager extends SavedData {
         double dimMult = getDimensionMultiplier(type, dimOrNull);
         double result = globalMult * dimMult;
 
-        if (DEBUG_DIM) {
+        if (DebugConfig.get().debugDimensionBoosts) {
             EvolutionBoost.LOGGER.info(
                     "[Boost][dim][get] type={} dim={} globalMult={} dimMult={} result={}",
                     type,
@@ -347,6 +349,11 @@ public class BoostManager extends SavedData {
     // ---------- Tick / Bossbars ----------
 
     public void tick(MinecraftServer server) {
+        tickCounter++;
+        
+        // Bossbar-Updates nur alle 20 Ticks (1 Sekunde) für bessere Performance
+        boolean updateBossbars = (tickCounter % 20 == 0);
+        
         long now = System.currentTimeMillis();
         List<String> toRemove = new ArrayList<>();
         for (var entry : active.entrySet()) {
@@ -357,7 +364,9 @@ public class BoostManager extends SavedData {
                 toRemove.add(key);
                 continue;
             }
-            updateBossbar(server, ab, left);
+            if (updateBossbars) {
+                updateBossbar(server, ab, left);
+            }
         }
         toRemove.forEach(this::removeActiveAndBar);
     }

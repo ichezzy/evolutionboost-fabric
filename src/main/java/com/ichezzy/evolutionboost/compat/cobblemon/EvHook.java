@@ -4,6 +4,7 @@ import com.cobblemon.mod.common.api.Priority;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
+import com.ichezzy.evolutionboost.configs.DebugConfig;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
 import net.minecraft.resources.ResourceKey;
@@ -27,8 +28,6 @@ import java.util.UUID;
 public final class EvHook {
 
     private EvHook() {}
-
-    private static final boolean DEBUG_EV = true;
 
     /**
      * Alte Signatur für HooksRegistrar – clsEvents/priority werden nicht mehr benötigt.
@@ -112,7 +111,7 @@ public final class EvHook {
         BoostManager bm = BoostManager.get(server);
         double mult = bm.getMultiplierFor(BoostType.EV, null, dimKey);
 
-        if (DEBUG_EV) {
+        if (DebugConfig.get().debugEvHook) {
             EvolutionBoost.LOGGER.info(
                     "[compat][ev][debug] stat={} baseAmount={} dim={} mult={}",
                     statName,
@@ -136,10 +135,12 @@ public final class EvHook {
             return;
         }
 
-        EvolutionBoost.LOGGER.info(
-                "[compat][ev] boosted EV gain for {} from {} to {} (mult={})",
-                statName, baseAmount, boosted, mult
-        );
+        if (DebugConfig.get().logBoostApplications) {
+            EvolutionBoost.LOGGER.info(
+                    "[compat][ev] boosted EV gain for {} from {} to {} (mult={})",
+                    statName, baseAmount, boosted, mult
+            );
+        }
     }
 
     /**

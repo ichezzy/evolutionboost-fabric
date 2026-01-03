@@ -199,38 +199,69 @@ public final class QuestManager {
      * Wird beim Join und wenn neue Quests verfügbar werden aufgerufen.
      */
     public void notifyAvailableQuests(ServerPlayer player) {
+        // Check notification setting
+        if (!com.ichezzy.evolutionboost.configs.NotificationConfig.isEnabled(player.getUUID(), 
+                com.ichezzy.evolutionboost.configs.NotificationConfig.NotificationType.QUESTS)) {
+            return;
+        }
+
         Set<String> available = getAvailableQuests(player);
         
         if (available.isEmpty()) {
-            return; // Keine Benachrichtigung wenn nichts verfügbar
+            return;
         }
 
-        player.sendSystemMessage(Component.literal(""));
-        player.sendSystemMessage(Component.literal("═══ Quests Available! ═══")
-                .withStyle(ChatFormatting.GOLD));
-
+        List<String> questNames = new java.util.ArrayList<>();
         for (String questId : available) {
-            getQuest(questId).ifPresent(quest -> {
-                player.sendSystemMessage(Component.literal("  ★ " + quest.getName())
-                        .withStyle(ChatFormatting.AQUA)
-                        .append(Component.literal(" - /eb quest start " + quest.getQuestLine() + " " + quest.getId())
-                                .withStyle(ChatFormatting.GRAY)));
-            });
+            getQuest(questId).ifPresent(quest -> questNames.add(quest.getName()));
         }
 
-        player.sendSystemMessage(Component.literal("═════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal(""));
+        player.sendSystemMessage(Component.literal("📜 Quests available: ")
+                .withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(String.join(", ", questNames))
+                        .withStyle(ChatFormatting.YELLOW)));
+        player.sendSystemMessage(Component.literal("   → /eb quest list")
+                .withStyle(ChatFormatting.GRAY));
+    }
+
+    /**
+     * Benachrichtigt über abgebbare Quests beim Login.
+     */
+    public void notifyReadyToTurnIn(ServerPlayer player) {
+        // Check notification setting
+        if (!com.ichezzy.evolutionboost.configs.NotificationConfig.isEnabled(player.getUUID(), 
+                com.ichezzy.evolutionboost.configs.NotificationConfig.NotificationType.QUESTS)) {
+            return;
+        }
+
+        PlayerQuestData data = getPlayerData(player);
+        List<String> readyQuests = new java.util.ArrayList<>();
+
+        for (Quest quest : quests.values()) {
+            QuestStatus status = data.getStatus(quest.getFullId());
+            if (status == QuestStatus.ACTIVE || status == QuestStatus.READY_TO_COMPLETE) {
+                if (areAllObjectivesComplete(quest, data, quest.getFullId())) {
+                    readyQuests.add(quest.getName());
+                }
+            }
+        }
+
+        if (!readyQuests.isEmpty()) {
+            player.sendSystemMessage(Component.literal("✨ Quests ready to turn in: ")
+                    .withStyle(ChatFormatting.GREEN)
+                    .append(Component.literal(String.join(", ", readyQuests))
+                            .withStyle(ChatFormatting.YELLOW)));
+            player.sendSystemMessage(Component.literal("   → /eb quest turnin <questline> <id>")
+                    .withStyle(ChatFormatting.GRAY));
+        }
     }
 
     /**
      * Prüft ob ein Spieler nach einer Quest-Aktion neue Quests verfügbar hat.
-     * Wird nach completeQuest aufgerufen.
      */
     public void checkAndNotifyNewQuests(ServerPlayer player, Set<String> previouslyAvailable) {
         Set<String> nowAvailable = getAvailableQuests(player);
         
-        // Neue Quests = jetzt verfügbar aber vorher nicht
         Set<String> newQuests = new HashSet<>(nowAvailable);
         newQuests.removeAll(previouslyAvailable);
         
@@ -238,22 +269,15 @@ public final class QuestManager {
             return;
         }
 
-        player.sendSystemMessage(Component.literal(""));
-        player.sendSystemMessage(Component.literal("═══ New Quest Unlocked! ═══")
-                .withStyle(ChatFormatting.GREEN));
-
+        List<String> questNames = new java.util.ArrayList<>();
         for (String questId : newQuests) {
-            getQuest(questId).ifPresent(quest -> {
-                player.sendSystemMessage(Component.literal("  ★ " + quest.getName())
-                        .withStyle(ChatFormatting.AQUA)
-                        .append(Component.literal(" - /eb quest start " + quest.getQuestLine() + " " + quest.getId())
-                                .withStyle(ChatFormatting.GRAY)));
-            });
+            getQuest(questId).ifPresent(quest -> questNames.add(quest.getName()));
         }
 
-        player.sendSystemMessage(Component.literal("═══════════════════════════")
-                .withStyle(ChatFormatting.GREEN));
-        player.sendSystemMessage(Component.literal(""));
+        player.sendSystemMessage(Component.literal("🔓 New quest unlocked: ")
+                .withStyle(ChatFormatting.GREEN)
+                .append(Component.literal(String.join(", ", questNames))
+                        .withStyle(ChatFormatting.YELLOW)));
     }
 
     // ==================== Quest Status Management ====================
@@ -265,7 +289,7 @@ public final class QuestManager {
     public boolean activateQuest(ServerPlayer player, String questId) {
         Optional<Quest> questOpt = getQuest(questId);
         if (questOpt.isEmpty()) {
-            player.sendSystemMessage(Component.literal("[Quest] Unknown quest: " + questId)
+            player.sendSystemMessage(Component.literal("❌ Unknown quest: " + questId)
                     .withStyle(ChatFormatting.RED));
             return false;
         }
@@ -276,12 +300,12 @@ public final class QuestManager {
         // Prüfe ob bereits aktiv oder abgeschlossen
         QuestStatus currentStatus = data.getStatus(questId);
         if (currentStatus == QuestStatus.ACTIVE) {
-            player.sendSystemMessage(Component.literal("[Quest] Quest already active!")
+            player.sendSystemMessage(Component.literal("⚠ Quest already active!")
                     .withStyle(ChatFormatting.YELLOW));
             return false;
         }
         if (currentStatus == QuestStatus.COMPLETED) {
-            player.sendSystemMessage(Component.literal("[Quest] Quest already completed!")
+            player.sendSystemMessage(Component.literal("⚠ Quest already completed!")
                     .withStyle(ChatFormatting.YELLOW));
             return false;
         }
@@ -289,8 +313,12 @@ public final class QuestManager {
         // Prüfe Prerequisites
         for (String prereq : quest.getPrerequisites()) {
             if (!data.isCompleted(prereq)) {
-                player.sendSystemMessage(Component.literal("[Quest] You must complete '" + prereq + "' first!")
-                        .withStyle(ChatFormatting.RED));
+                player.sendSystemMessage(Component.literal("❌ You must complete '")
+                        .withStyle(ChatFormatting.RED)
+                        .append(Component.literal(prereq)
+                                .withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal("' first!")
+                                .withStyle(ChatFormatting.RED)));
                 return false;
             }
         }
@@ -298,16 +326,13 @@ public final class QuestManager {
         // Aktivieren
         data.setStatus(questId, QuestStatus.ACTIVE);
 
-        // Benachrichtigung
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("  Quest Started: ")
-                .withStyle(ChatFormatting.GREEN)
-                .append(Component.literal(quest.getName()).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
-        player.sendSystemMessage(Component.literal("  " + quest.getDescription())
+        // Benachrichtigung - minimalistisch
+        player.sendSystemMessage(Component.literal("📜 Quest started: ")
+                .withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(quest.getName())
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
+        player.sendSystemMessage(Component.literal("   " + quest.getDescription())
                 .withStyle(ChatFormatting.GRAY));
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
 
         savePlayerData(player.getUUID());
         return true;
@@ -326,7 +351,7 @@ public final class QuestManager {
 
         // Prüfe ob alle Objectives erfüllt
         if (!areAllObjectivesComplete(quest, data, questId)) {
-            player.sendSystemMessage(Component.literal("[Quest] Not all objectives completed!")
+            player.sendSystemMessage(Component.literal("❌ Not all objectives completed!")
                     .withStyle(ChatFormatting.RED));
             return false;
         }
@@ -334,23 +359,18 @@ public final class QuestManager {
         // Status setzen
         data.setStatus(questId, QuestStatus.COMPLETED);
 
-        // Rewards vergeben
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("  Quest Completed: ")
+        // Rewards vergeben - minimalistisch
+        player.sendSystemMessage(Component.literal("✨ Quest completed: ")
                 .withStyle(ChatFormatting.GREEN)
-                .append(Component.literal(quest.getName()).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
-        player.sendSystemMessage(Component.literal("  Rewards:").withStyle(ChatFormatting.AQUA));
+                .append(Component.literal(quest.getName())
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
 
         for (QuestReward reward : quest.getRewards()) {
             if (reward.grantTo(player)) {
-                player.sendSystemMessage(Component.literal("    • " + reward.getDisplayText())
+                player.sendSystemMessage(Component.literal("   + " + reward.getDisplayText())
                         .withStyle(ChatFormatting.WHITE));
             }
         }
-
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
 
         savePlayerData(player.getUUID());
 
@@ -405,7 +425,7 @@ public final class QuestManager {
     public boolean completeQuestWithItemRemoval(ServerPlayer player, String questId) {
         Optional<Quest> questOpt = getQuest(questId);
         if (questOpt.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Unknown quest: " + questId)
+            player.sendSystemMessage(Component.literal("❌ Unknown quest: " + questId)
                     .withStyle(ChatFormatting.RED));
             return false;
         }
@@ -416,14 +436,14 @@ public final class QuestManager {
         // Prüfe ob Quest aktiv oder ready ist
         QuestStatus status = data.getStatus(questId);
         if (status != QuestStatus.ACTIVE && status != QuestStatus.READY_TO_COMPLETE) {
-            player.sendSystemMessage(Component.literal("Quest is not active: " + questId)
+            player.sendSystemMessage(Component.literal("❌ Quest is not active: " + questId)
                     .withStyle(ChatFormatting.RED));
             return false;
         }
 
         // Prüfe ob alle Objectives erfüllt sind
         if (!areAllObjectivesComplete(quest, data, questId)) {
-            player.sendSystemMessage(Component.literal("Quest objectives not complete!")
+            player.sendSystemMessage(Component.literal("❌ Quest objectives not complete!")
                     .withStyle(ChatFormatting.RED));
             return false;
         }
@@ -436,16 +456,16 @@ public final class QuestManager {
             String itemId = obj.getFilterString("item");
             if (itemId != null && obj.shouldConsumeItems()) {
                 int required = obj.getTarget();
-                boolean removed = com.ichezzy.evolutionboost.quest.hooks.QuestItemHook
+                boolean removed = com.ichezzy.evolutionboost.compat.cobblemon.QuestItemHook
                         .removeItemsFromInventory(player, itemId, required);
                 
                 if (!removed) {
-                    player.sendSystemMessage(Component.literal("Failed to remove items: " + itemId)
+                    player.sendSystemMessage(Component.literal("❌ Failed to remove items: " + itemId)
                             .withStyle(ChatFormatting.RED));
                     return false;
                 }
                 
-                player.sendSystemMessage(Component.literal("  ✗ Removed " + required + "x " + itemId)
+                player.sendSystemMessage(Component.literal("   - Removed " + required + "x " + itemId)
                         .withStyle(ChatFormatting.GRAY));
             }
         }
@@ -453,23 +473,18 @@ public final class QuestManager {
         // Quest als COMPLETED markieren
         data.setStatus(questId, QuestStatus.COMPLETED);
 
-        // Rewards geben
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("  Quest Completed: ")
+        // Rewards geben - minimalistisch
+        player.sendSystemMessage(Component.literal("✨ Quest completed: ")
                 .withStyle(ChatFormatting.GREEN)
-                .append(Component.literal(quest.getName()).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
-        player.sendSystemMessage(Component.literal("  Rewards:").withStyle(ChatFormatting.AQUA));
+                .append(Component.literal(quest.getName())
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
 
         for (QuestReward reward : quest.getRewards()) {
             if (reward.grantTo(player)) {
-                player.sendSystemMessage(Component.literal("    • " + reward.getDisplayText())
+                player.sendSystemMessage(Component.literal("   + " + reward.getDisplayText())
                         .withStyle(ChatFormatting.WHITE));
             }
         }
-
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
 
         savePlayerData(player.getUUID());
 
@@ -504,23 +519,18 @@ public final class QuestManager {
         // Quest als COMPLETED markieren (ohne Objective-Prüfung!)
         data.setStatus(questId, QuestStatus.COMPLETED);
 
-        // Rewards geben
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("  Quest Completed (Admin): ")
+        // Rewards geben - minimalistisch
+        player.sendSystemMessage(Component.literal("✨ Quest completed (Admin): ")
                 .withStyle(ChatFormatting.GREEN)
-                .append(Component.literal(quest.getName()).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
-        player.sendSystemMessage(Component.literal("  Rewards:").withStyle(ChatFormatting.AQUA));
+                .append(Component.literal(quest.getName())
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
 
         for (QuestReward reward : quest.getRewards()) {
             if (reward.grantTo(player)) {
-                player.sendSystemMessage(Component.literal("    • " + reward.getDisplayText())
+                player.sendSystemMessage(Component.literal("   + " + reward.getDisplayText())
                         .withStyle(ChatFormatting.WHITE));
             }
         }
-
-        player.sendSystemMessage(Component.literal("═══════════════════════════════")
-                .withStyle(ChatFormatting.GOLD));
 
         savePlayerData(player.getUUID());
 

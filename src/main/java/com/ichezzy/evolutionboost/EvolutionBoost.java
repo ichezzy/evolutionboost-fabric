@@ -2,25 +2,33 @@ package com.ichezzy.evolutionboost;
 
 import com.ichezzy.evolutionboost.block.ModBlocks;
 import com.ichezzy.evolutionboost.boost.BoostManager;
+import com.ichezzy.evolutionboost.command.AdminCommand;
 import com.ichezzy.evolutionboost.command.BoostCommand;
+import com.ichezzy.evolutionboost.command.DexCommand;
 import com.ichezzy.evolutionboost.command.EventCommand;
 import com.ichezzy.evolutionboost.command.HelpCommand;
+import com.ichezzy.evolutionboost.command.NotificationCommand;
 import com.ichezzy.evolutionboost.command.QuestCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.command.WeatherCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.configs.CommandLogConfig;
+import com.ichezzy.evolutionboost.configs.NotificationConfig;
+import com.ichezzy.evolutionboost.dex.DexCatchHook;
+import com.ichezzy.evolutionboost.dex.DexDataManager;
 import com.ichezzy.evolutionboost.hud.BoostHudSync;
 import com.ichezzy.evolutionboost.hud.DimBoostHudPayload;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.item.TicketManager;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
+import com.ichezzy.evolutionboost.permission.PermissionRegistry;
 import com.ichezzy.evolutionboost.quest.QuestManager;
-import com.ichezzy.evolutionboost.quest.hooks.QuestBattleHook;
-import com.ichezzy.evolutionboost.quest.hooks.QuestCatchHook;
-import com.ichezzy.evolutionboost.quest.hooks.QuestItemHook;
+import com.ichezzy.evolutionboost.compat.cobblemon.QuestBattleHook;
+import com.ichezzy.evolutionboost.compat.cobblemon.QuestCatchHook;
+import com.ichezzy.evolutionboost.compat.cobblemon.QuestItemHook;
 import com.ichezzy.evolutionboost.reward.RewardManager;
+import com.ichezzy.evolutionboost.util.DimensionRestrictions;
 import com.ichezzy.evolutionboost.weather.ChristmasWeatherManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.fabricmc.api.ModInitializer;
@@ -28,15 +36,20 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,13 +86,19 @@ public class EvolutionBoost implements ModInitializer {
 
                     // Jeder Command registriert sich unter /evolutionboost UND /eb
                     HelpCommand.register(d);
+                    AdminCommand.register(d);
                     RewardCommand.register(d);
                     BoostCommand.register(d);
                     EventCommand.register(d);
                     WeatherCommand.register(d);
                     QuestCommand.register(d);
+                    DexCommand.register(d);
+                    NotificationCommand.register(d);
                 }
         );
+
+        // ---- Permissions registrieren (für LuckPerms) ----
+        PermissionRegistry.register();
 
         // ---- Logging früh aktivieren ----
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
@@ -90,9 +109,11 @@ public class EvolutionBoost implements ModInitializer {
 
         // ---- Server gestartet ----
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            NotificationConfig.init(server); // Notification-Einstellungen laden
             RewardManager.init(server);
             BoostManager.get(server); // init/load
             QuestManager.get().init(server); // Quest-System initialisieren
+            DexDataManager.init(server); // Pokédex-Daten initialisieren
 
             if (FabricLoader.getInstance().isModLoaded("cobblemon")) {
                 HooksRegistrar.register(server);
@@ -100,7 +121,9 @@ public class EvolutionBoost implements ModInitializer {
                 QuestBattleHook.register();
                 QuestCatchHook.register();
                 QuestItemHook.register();
-                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest hooks)");
+                // Pokédex-Hook registrieren
+                DexCatchHook.register();
+                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest & Dex hooks)");
             } else {
                 LOGGER.warn("Cobblemon not detected – hooks skipped");
             }
@@ -110,6 +133,7 @@ public class EvolutionBoost implements ModInitializer {
 
         // ---- Stop/Cleanup ----
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            NotificationConfig.shutdown();
             CommandLogManager.close();
             safeUnregister(server);
         });
@@ -120,7 +144,7 @@ public class EvolutionBoost implements ModInitializer {
             if (player != null) {
                 RewardManager.onPlayerJoin(player);
                 
-                // Quest-Benachrichtigung mit 2 Sekunden Verzögerung
+                // Quest und Dex-Benachrichtigungen mit 2 Sekunden Verzögerung
                 final UUID playerId = player.getUUID();
                 java.util.concurrent.CompletableFuture.runAsync(() -> {
                     try {
@@ -129,6 +153,8 @@ public class EvolutionBoost implements ModInitializer {
                             ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
                             if (onlinePlayer != null) {
                                 QuestManager.get().notifyAvailableQuests(onlinePlayer);
+                                QuestManager.get().notifyReadyToTurnIn(onlinePlayer); // Turn-in Hinweise
+                                DexDataManager.notifyOnJoin(onlinePlayer);
                             }
                         });
                     } catch (InterruptedException ignored) {}
@@ -136,17 +162,35 @@ public class EvolutionBoost implements ModInitializer {
             }
         });
 
-        // ---- Fallschaden in event:christmas deaktivieren ----
+        // ---- Fallschaden in beschränkten Dimensionen deaktivieren ----
+        // (event:*, evolution:* außer evolution:quarry)
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
-            // Prüfe ob es Fallschaden ist
             if (source.is(DamageTypes.FALL)) {
-                // Prüfe ob Entity in der Christmas-Dimension ist
-                ResourceLocation dimId = entity.level().dimension().location();
-                if (dimId.getNamespace().equals("event") && dimId.getPath().equals("christmas")) {
+                if (DimensionRestrictions.isFallDamageDisabled(entity.level())) {
                     return false; // Schaden verhindern
                 }
             }
             return true; // Schaden erlauben
+        });
+
+        // ---- Raketen (Firework Rockets) in beschränkten Dimensionen blockieren ----
+        UseItemCallback.EVENT.register((player, world, hand) -> {
+            if (world.isClientSide()) {
+                return InteractionResultHolder.pass(player.getItemInHand(hand));
+            }
+            
+            if (DimensionRestrictions.isFlightRestricted(world)) {
+                if (player.getItemInHand(hand).is(Items.FIREWORK_ROCKET)) {
+                    player.displayClientMessage(
+                            Component.literal("⚠ Firework rockets are disabled in this dimension!")
+                                    .withStyle(ChatFormatting.RED),
+                            true
+                    );
+                    return InteractionResultHolder.fail(player.getItemInHand(hand));
+                }
+            }
+            
+            return InteractionResultHolder.pass(player.getItemInHand(hand));
         });
 
         // ---- Tick ----
@@ -157,6 +201,21 @@ public class EvolutionBoost implements ModInitializer {
             if (server.getTickCount() % 40 == 0) {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                     QuestItemHook.checkInventoryForQuests(player);
+                }
+            }
+            
+            // Elytra-Flug in beschränkten Dimensionen stoppen (alle 5 Ticks = 4x pro Sekunde)
+            // Das ist ausreichend schnell und spart 80% Performance vs jeden Tick
+            if (server.getTickCount() % 5 == 0) {
+                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                    if (player.isFallFlying() && DimensionRestrictions.isFlightRestricted(player.level())) {
+                        player.stopFallFlying();
+                        player.displayClientMessage(
+                                Component.literal("⚠ Elytra flight is disabled in this dimension!")
+                                        .withStyle(ChatFormatting.RED),
+                                true
+                        );
+                    }
                 }
             }
         });
@@ -171,5 +230,6 @@ public class EvolutionBoost implements ModInitializer {
         }
         RewardManager.saveAll();
         QuestManager.get().shutdown(); // Quest-Daten speichern
+        DexDataManager.shutdown(); // Pokédex-Daten speichern
     }
 }

@@ -5,6 +5,7 @@ import com.cobblemon.mod.common.api.events.CobblemonEvents;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.boost.BoostType;
+import com.ichezzy.evolutionboost.configs.DebugConfig;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
 import net.minecraft.resources.ResourceKey;
@@ -29,8 +30,6 @@ import static com.ichezzy.evolutionboost.compat.cobblemon.ReflectUtils.findAny;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class XpHook {
     private XpHook() {}
-
-    private static final boolean DEBUG_XP = true; // Bei Bedarf auf false setzen
 
     /**
      * Alte Signatur für HooksRegistrar – clsEvents/priority werden nicht mehr benötigt.
@@ -93,7 +92,7 @@ public final class XpHook {
                 : extractServerLevel(ev, src, server);
 
         if (level == null) {
-            if (DEBUG_XP) {
+            if (DebugConfig.get().debugXpHook) {
                 EvolutionBoost.LOGGER.info(
                         "[compat][xp][debug] no ServerLevel found for event={}, source={}, pokemon={}",
                         ev.getClass().getName(),
@@ -116,7 +115,7 @@ public final class XpHook {
         BoostManager bm = BoostManager.get(server);
         double mult = bm.getMultiplierFor(BoostType.XP, null, dimKey);
 
-        if (DEBUG_XP) {
+        if (DebugConfig.get().debugXpHook) {
             EvolutionBoost.LOGGER.info(
                     "[compat][xp][debug] dim={} baseXp={} mult={}",
                     dimKey.location(),
@@ -137,10 +136,12 @@ public final class XpHook {
             return;
         }
 
-        EvolutionBoost.LOGGER.info(
-                "[compat][xp] boosted battle XP in {} from {} to {} (mult={})",
-                dimKey.location(), baseXp, boosted, mult
-        );
+        if (DebugConfig.get().logBoostApplications) {
+            EvolutionBoost.LOGGER.info(
+                    "[compat][xp] boosted battle XP in {} from {} to {} (mult={})",
+                    dimKey.location(), baseXp, boosted, mult
+            );
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -366,7 +367,7 @@ public final class XpHook {
                 if (uuid != null) {
                     ServerPlayer sp = server.getPlayerList().getPlayer(uuid);
                     if (sp != null) {
-                        if (DEBUG_XP) {
+                        if (DebugConfig.get().debugXpHook) {
                             EvolutionBoost.LOGGER.info(
                                     "[compat][xp][debug] resolved player via Pokemon owner UUID {} -> {}",
                                     uuid, sp.getGameProfile().getName()
@@ -388,7 +389,7 @@ public final class XpHook {
                 if (m == null) continue;
                 Object o = m.invoke(pokemon);
                 if (o instanceof ServerPlayer sp) {
-                    if (DEBUG_XP) {
+                    if (DebugConfig.get().debugXpHook) {
                         EvolutionBoost.LOGGER.info(
                                 "[compat][xp][debug] resolved player via Pokemon owner object {}",
                                 sp.getGameProfile().getName()

@@ -2,7 +2,7 @@ package com.ichezzy.evolutionboost.command;
 
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.quest.*;
-import com.ichezzy.evolutionboost.quest.hooks.QuestItemHook;
+import com.ichezzy.evolutionboost.compat.cobblemon.QuestItemHook;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
