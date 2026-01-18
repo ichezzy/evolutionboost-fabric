@@ -19,5 +19,8 @@
     "fabric": "*",
     "fabric-language-kotlin": "*",
     "cobblemon": ">=1.6.0 <1.7.0"
+  },
+  "suggests": {
+    "trinkets": ">=3.10.0"
   }
 }

@@ -52,7 +52,7 @@ public final class EvolutionBoostConfig {
     // ==================== General Settings ====================
 
     /** Maximale erlaubte Boost-Multiplikation (z. B. 10.0) */
-    public double maxBoostMultiplier = 5.0;
+    public double maxBoostMultiplier = 2.0;
 
     /**
      * Basischance für Shiny-Rolls (1 in shinyBaseOdds).
@@ -71,6 +71,14 @@ public final class EvolutionBoostConfig {
 
     /** Radius in Blöcken, in dem der Charm wirkt */
     public double shinyCharmRadius = 64.0;
+
+    // ==================== XP Charm Settings ====================
+
+    /** Ob der XP Charm aktiviert ist */
+    public boolean xpCharmEnabled = true;
+
+    /** Multiplikator für XP wenn Charm ausgerüstet (z.B. 1.5 = 50% mehr XP) */
+    public double xpCharmMultiplier = 1.5;
 
     // ==================== NOTE: Christmas Settings moved to event.json ====================
     // Christmas settings are now in EventConfig (config/evolutionboost/event.json)
@@ -124,7 +132,7 @@ public final class EvolutionBoostConfig {
 
         // Fallbacks für alte Configs ohne neue Felder
         if (INSTANCE.maxBoostMultiplier <= 0) {
-            INSTANCE.maxBoostMultiplier = 5.0;
+            INSTANCE.maxBoostMultiplier = 2.0;
         }
         if (INSTANCE.shinyBaseOdds <= 0) {
             INSTANCE.shinyBaseOdds = 8192;
@@ -134,6 +142,9 @@ public final class EvolutionBoostConfig {
         }
         if (INSTANCE.shinyCharmRadius <= 0) {
             INSTANCE.shinyCharmRadius = 64.0;
+        }
+        if (INSTANCE.xpCharmMultiplier <= 0) {
+            INSTANCE.xpCharmMultiplier = 1.5;
         }
         if (INSTANCE.dimensionBoosts == null) {
             INSTANCE.dimensionBoosts = new LinkedHashMap<>();
@@ -161,13 +172,17 @@ public final class EvolutionBoostConfig {
         EvolutionBoostConfig c = new EvolutionBoostConfig();
 
         // General Settings
-        c.maxBoostMultiplier = 5.0;
+        c.maxBoostMultiplier = 2.0;
         c.shinyBaseOdds = 8192;
 
         // Shiny Charm
         c.shinyCharmEnabled = true;
         c.shinyCharmMultiplier = 2.0;
         c.shinyCharmRadius = 64.0;
+
+        // XP Charm
+        c.xpCharmEnabled = true;
+        c.xpCharmMultiplier = 1.5;
 
         // Maps
         c.dimensionBoosts = new LinkedHashMap<>();

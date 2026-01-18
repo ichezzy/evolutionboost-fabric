@@ -1,6 +1,8 @@
 package com.ichezzy.evolutionboost.command;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
+import com.ichezzy.evolutionboost.item.TicketManager;
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.permission.PermissionRegistry;
 import com.mojang.brigadier.CommandDispatcher;
@@ -10,6 +12,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -20,6 +23,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -30,13 +34,16 @@ import java.util.Map;
 /**
  * Admin-Befehle für Server-Management.
  * 
- * /eb admin tpspawn online       - Teleportiert alle Online-Spieler zum Spawn
- * /eb admin tpspawn offline      - Setzt Offline-Spieler Position zum Spawn
- * /eb admin tpspawn all          - Beides
- * /eb admin tpspawn <player>     - Teleportiert einen Spieler zum Spawn
- * /eb admin info                 - Zeigt Server-Info
- * /eb admin gc                   - Führt Garbage Collection aus
- * /eb admin permissions          - Zeigt alle verfügbaren Permissions
+ * /eb admin tp <dimension>          - Teleportiert zu einer Dimension
+ * /eb admin return                  - Teleportiert zum Overworld-Spawn
+ * /eb admin setspawn <target>       - Setzt Event-Spawn an aktueller Position
+ * /eb admin tpspawn online          - Teleportiert alle Online-Spieler zum Spawn
+ * /eb admin tpspawn offline         - Setzt Offline-Spieler Position zum Spawn
+ * /eb admin tpspawn all             - Beides
+ * /eb admin tpspawn player <player> - Teleportiert einen Spieler zum Spawn
+ * /eb admin info                    - Zeigt Server-Info
+ * /eb admin gc                      - Führt Garbage Collection aus
+ * /eb admin permissions             - Zeigt alle verfügbaren Permissions
  */
 public final class AdminCommand {
     private AdminCommand() {}
@@ -45,9 +52,32 @@ public final class AdminCommand {
             (ctx, builder) -> SharedSuggestionProvider.suggest(
                     List.of("online", "offline", "all"), builder);
 
+    private static final SuggestionProvider<CommandSourceStack> SETSPAWN_TARGET_SUGGEST =
+            (ctx, builder) -> SharedSuggestionProvider.suggest(
+                    List.of("halloween", "safari", "christmas"), builder);
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var adminTree = Commands.literal("admin")
                 .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.admin", 3, false))
+
+                // /eb admin tp <dimension> - Teleport zu beliebiger Dimension
+                .then(Commands.literal("tp")
+                        .then(Commands.argument("dimension", DimensionArgument.dimension())
+                                .executes(ctx -> teleportToDimension(
+                                        ctx.getSource(),
+                                        DimensionArgument.getDimension(ctx, "dimension")))))
+
+                // /eb admin return - Zurück zum Overworld-Spawn
+                .then(Commands.literal("return")
+                        .executes(ctx -> returnToOverworld(ctx.getSource())))
+
+                // /eb admin setspawn <halloween|safari|christmas>
+                .then(Commands.literal("setspawn")
+                        .then(Commands.argument("target", StringArgumentType.word())
+                                .suggests(SETSPAWN_TARGET_SUGGEST)
+                                .executes(ctx -> setEventSpawn(
+                                        ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "target")))))
 
                 // /eb admin tpspawn <type>
                 .then(Commands.literal("tpspawn")
@@ -92,6 +122,21 @@ public final class AdminCommand {
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
         src.sendSuccess(() -> Component.literal(""), false);
         
+        src.sendSuccess(() -> Component.literal("/eb admin tp <dimension>")
+                .withStyle(ChatFormatting.YELLOW)
+                .append(Component.literal(" - Teleport to any dimension")
+                        .withStyle(ChatFormatting.GRAY)), false);
+        
+        src.sendSuccess(() -> Component.literal("/eb admin return")
+                .withStyle(ChatFormatting.YELLOW)
+                .append(Component.literal(" - Return to Overworld spawn")
+                        .withStyle(ChatFormatting.GRAY)), false);
+        
+        src.sendSuccess(() -> Component.literal("/eb admin setspawn <target>")
+                .withStyle(ChatFormatting.YELLOW)
+                .append(Component.literal(" - Set event spawn (halloween/safari/christmas)")
+                        .withStyle(ChatFormatting.GRAY)), false);
+        
         src.sendSuccess(() -> Component.literal("/eb admin tpspawn online")
                 .withStyle(ChatFormatting.YELLOW)
                 .append(Component.literal(" - TP all online players to spawn")
@@ -107,7 +152,7 @@ public final class AdminCommand {
                 .append(Component.literal(" - Both online and offline")
                         .withStyle(ChatFormatting.GRAY)), false);
         
-        src.sendSuccess(() -> Component.literal("/eb admin tpspawn player <name>")
+        src.sendSuccess(() -> Component.literal("/eb admin tpspawn player <n>")
                 .withStyle(ChatFormatting.YELLOW)
                 .append(Component.literal(" - TP specific player")
                         .withStyle(ChatFormatting.GRAY)), false);
@@ -133,6 +178,103 @@ public final class AdminCommand {
                         .withStyle(ChatFormatting.GRAY)), false);
 
         return 1;
+    }
+
+    // ==================== Dimension Teleport ====================
+
+    private static int teleportToDimension(CommandSourceStack src, ServerLevel destination) {
+        try {
+            ServerPlayer player = src.getPlayerOrException();
+
+            // Spawn-Position für die Dimension ermitteln
+            BlockPos spawnPos;
+            String dimPath = destination.dimension().location().getPath();
+            
+            // Erst prüfen ob es ein bekanntes Event-Ziel ist
+            TicketManager.Target target = TicketManager.Target.from(dimPath);
+            if (target != null) {
+                spawnPos = TicketManager.getSpawn(target);
+            } else {
+                // Prüfe Config für event:* Dimensionen
+                EvolutionBoostConfig.Spawn configSpawn = EvolutionBoostConfig.get().getSpawn(dimPath);
+                if (configSpawn != null) {
+                    spawnPos = configSpawn.toBlockPos();
+                } else {
+                    // Fallback: Dimension-Spawn oder 0,80,0
+                    spawnPos = destination.getSharedSpawnPos();
+                    if (spawnPos.getY() < 1) {
+                        spawnPos = new BlockPos(0, 80, 0);
+                    }
+                }
+            }
+
+            player.teleportTo(destination, 
+                    spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 
+                    player.getYRot(), player.getXRot());
+
+            src.sendSuccess(() -> Component.literal("✓ Teleported to " + destination.dimension().location())
+                    .withStyle(ChatFormatting.GREEN), false);
+            
+            return 1;
+        } catch (Exception e) {
+            src.sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int returnToOverworld(CommandSourceStack src) {
+        try {
+            ServerPlayer player = src.getPlayerOrException();
+            ServerLevel overworld = player.server.getLevel(Level.OVERWORLD);
+
+            if (overworld == null) {
+                src.sendFailure(Component.literal("Could not find Overworld."));
+                return 0;
+            }
+
+            BlockPos spawnPos = overworld.getSharedSpawnPos();
+            player.teleportTo(overworld, 
+                    spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 
+                    player.getYRot(), player.getXRot());
+
+            src.sendSuccess(() -> Component.literal("✓ Returned to Overworld spawn")
+                    .withStyle(ChatFormatting.GREEN), false);
+            
+            return 1;
+        } catch (Exception e) {
+            src.sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int setEventSpawn(CommandSourceStack src, String targetName) {
+        try {
+            ServerPlayer player = src.getPlayerOrException();
+            
+            TicketManager.Target target = switch (targetName.toLowerCase()) {
+                case "halloween" -> TicketManager.Target.HALLOWEEN;
+                case "safari" -> TicketManager.Target.SAFARI;
+                case "christmas" -> TicketManager.Target.CHRISTMAS;
+                default -> null;
+            };
+
+            if (target == null) {
+                src.sendFailure(Component.literal("Unknown target. Use: halloween, safari, christmas"));
+                return 0;
+            }
+
+            BlockPos pos = player.blockPosition();
+            TicketManager.setSpawn(target, pos);
+            
+            src.sendSuccess(() -> Component.literal("✓ " + target.key() + " spawn set to " + 
+                    pos.getX() + " " + pos.getY() + " " + pos.getZ())
+                    .withStyle(ChatFormatting.GREEN), false);
+            
+            return 1;
+        } catch (Exception e) {
+            src.sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
     }
 
     // ==================== Permissions ====================
@@ -175,88 +317,101 @@ public final class AdminCommand {
                                     "/lp user @s permission set " + permFinal + " true"))
                             .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                     Component.literal("Click to copy LuckPerms command")))), false);
+
             src.sendSuccess(() -> Component.literal("    " + descFinal)
                     .withStyle(ChatFormatting.GRAY), false);
         }
 
         src.sendSuccess(() -> Component.literal(""), false);
-        src.sendSuccess(() -> Component.literal("════════════════════════════════════")
-                .withStyle(ChatFormatting.GOLD), false);
+        src.sendSuccess(() -> Component.literal("════════════════════════════════").withStyle(ChatFormatting.GOLD), false);
 
         return 1;
     }
 
-    // ==================== TP to Spawn ====================
+    // ==================== TpSpawn ====================
 
     private static int tpSpawn(CommandSourceStack src, String type) {
         MinecraftServer server = src.getServer();
-        ServerLevel overworld = server.overworld();
-        BlockPos spawnPos = overworld.getSharedSpawnPos();
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        
+        if (overworld == null) {
+            src.sendFailure(Component.literal("Could not find Overworld."));
+            return 0;
+        }
 
+        BlockPos spawnPos = overworld.getSharedSpawnPos();
         int onlineCount = 0;
         int offlineCount = 0;
 
-        // Online-Spieler teleportieren
-        if ("online".equalsIgnoreCase(type) || "all".equalsIgnoreCase(type)) {
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                player.teleportTo(overworld, 
-                        spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5,
-                        player.getYRot(), player.getXRot());
-                player.sendSystemMessage(Component.literal("⚠ You have been teleported to spawn by an admin.")
-                        .withStyle(ChatFormatting.YELLOW));
-                onlineCount++;
+        switch (type.toLowerCase()) {
+            case "online" -> {
+                onlineCount = tpOnlinePlayers(server, overworld, spawnPos);
             }
-        }
-
-        // Offline-Spieler Position setzen
-        if ("offline".equalsIgnoreCase(type) || "all".equalsIgnoreCase(type)) {
-            offlineCount = setOfflinePlayersToSpawn(server, overworld, spawnPos);
+            case "offline" -> {
+                offlineCount = setOfflinePlayersToSpawn(server, spawnPos);
+            }
+            case "all" -> {
+                onlineCount = tpOnlinePlayers(server, overworld, spawnPos);
+                offlineCount = setOfflinePlayersToSpawn(server, spawnPos);
+            }
+            default -> {
+                src.sendFailure(Component.literal("Unknown type. Use: online, offline, all"));
+                return 0;
+            }
         }
 
         final int finalOnline = onlineCount;
         final int finalOffline = offlineCount;
 
-        if ("online".equalsIgnoreCase(type)) {
-            src.sendSuccess(() -> Component.literal("✓ Teleported " + finalOnline + " online players to spawn")
-                    .withStyle(ChatFormatting.GREEN), true);
-        } else if ("offline".equalsIgnoreCase(type)) {
-            src.sendSuccess(() -> Component.literal("✓ Set spawn position for " + finalOffline + " offline players")
-                    .withStyle(ChatFormatting.GREEN), true);
-        } else {
-            src.sendSuccess(() -> Component.literal("✓ Teleported " + finalOnline + " online, set " + finalOffline + " offline players to spawn")
-                    .withStyle(ChatFormatting.GREEN), true);
+        src.sendSuccess(() -> Component.literal("✓ Teleport to spawn complete!")
+                .withStyle(ChatFormatting.GREEN), false);
+        
+        if (finalOnline > 0) {
+            src.sendSuccess(() -> Component.literal("  Online players teleported: " + finalOnline)
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
+        if (finalOffline > 0) {
+            src.sendSuccess(() -> Component.literal("  Offline players modified: " + finalOffline)
+                    .withStyle(ChatFormatting.GRAY), false);
         }
 
-        EvolutionBoost.LOGGER.info("[admin] {} teleported players to spawn: {} online, {} offline", 
-                src.getTextName(), finalOnline, finalOffline);
+        EvolutionBoost.LOGGER.info("[admin] {} ran tpspawn {}: {} online, {} offline", 
+                src.getTextName(), type, finalOnline, finalOffline);
 
         return 1;
     }
 
     private static int tpSpawnPlayer(CommandSourceStack src, ServerPlayer target) {
-        ServerLevel overworld = src.getServer().overworld();
-        BlockPos spawnPos = overworld.getSharedSpawnPos();
+        ServerLevel overworld = src.getServer().getLevel(Level.OVERWORLD);
+        
+        if (overworld == null) {
+            src.sendFailure(Component.literal("Could not find Overworld."));
+            return 0;
+        }
 
-        target.teleportTo(overworld,
-                spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5,
+        BlockPos spawnPos = overworld.getSharedSpawnPos();
+        target.teleportTo(overworld, spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 
                 target.getYRot(), target.getXRot());
 
-        target.sendSystemMessage(Component.literal("⚠ You have been teleported to spawn by an admin.")
-                .withStyle(ChatFormatting.YELLOW));
-
-        src.sendSuccess(() -> Component.literal("✓ Teleported " + target.getGameProfile().getName() + " to spawn")
-                .withStyle(ChatFormatting.GREEN), true);
+        src.sendSuccess(() -> Component.literal("✓ Teleported " + target.getName().getString() + " to spawn")
+                .withStyle(ChatFormatting.GREEN), false);
 
         return 1;
     }
 
-    /**
-     * Setzt die Position aller Offline-Spieler auf den Spawn.
-     * Modifiziert die playerdata NBT-Dateien.
-     */
-    private static int setOfflinePlayersToSpawn(MinecraftServer server, ServerLevel overworld, BlockPos spawnPos) {
-        // Playerdata Ordner finden - liegt im World-Ordner
-        Path worldDir = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+    private static int tpOnlinePlayers(MinecraftServer server, ServerLevel overworld, BlockPos spawnPos) {
+        int count = 0;
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            p.teleportTo(overworld, spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 
+                    p.getYRot(), p.getXRot());
+            count++;
+        }
+        return count;
+    }
+
+    private static int setOfflinePlayersToSpawn(MinecraftServer server, BlockPos spawnPos) {
+        // Pfad zu playerdata
+        Path worldDir = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.PLAYER_DATA_DIR).getParent();
         Path playerDataDir = worldDir.resolve("playerdata");
         int count = 0;
 
@@ -364,8 +519,6 @@ public final class AdminCommand {
     }
 
     private static double getTPS(MinecraftServer server) {
-        // In 1.21.1 gibt es keine direkte getAverageTickTime() Methode
-        // Wir nutzen die tickTimes Array wenn verfügbar, sonst Schätzung
         try {
             long[] tickTimes = server.getTickTimesNanos();
             if (tickTimes != null && tickTimes.length > 0) {
@@ -379,7 +532,6 @@ public final class AdminCommand {
             }
         } catch (Exception ignored) {}
         
-        // Fallback: Annahme 20 TPS
         return 20.0;
     }
 

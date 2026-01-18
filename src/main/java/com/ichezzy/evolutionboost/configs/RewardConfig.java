@@ -207,9 +207,16 @@ public final class RewardConfig {
                 new RewardItem("evolutionboost:event_voucher_blank", 1)
         ));
 
-        // Fallback für alte Configs (wird von RewardManager nur genutzt, wenn jemand explizit "MONTHLY_DONATOR" referenziert)
-        c.rewards.put("MONTHLY_DONATOR", List.of(
-                new RewardItem("evolutionboost:evolution_coin_gold", 1)
+        // MONTHLY_DONATOR_PLATINUM:
+        // 1x Evolution Platinum Coin
+        // 10x Loot Boxes of each XP, Cobblemon Items and Pokéballs
+        // 1x Event Voucher (blank)
+        c.rewards.put("MONTHLY_DONATOR_PLATINUM", List.of(
+                new RewardItem("evolutionboost:evolution_coin_platinum", 1),
+                new RewardItem("wanteditems:gold_candy_lucky_box", 10),
+                new RewardItem("wanteditems:cobblemon_lucky_box", 10),
+                new RewardItem("wanteditems:ancient_poke_ball_lucky_box", 10),
+                new RewardItem("evolutionboost:event_voucher_blank", 1)
         ));
 
         // MONTHLY_GYM

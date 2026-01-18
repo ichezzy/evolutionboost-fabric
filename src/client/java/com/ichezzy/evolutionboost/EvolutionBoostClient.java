@@ -1,14 +1,21 @@
 package com.ichezzy.evolutionboost;
 
 import com.ichezzy.evolutionboost.boost.BoostType;
+import com.ichezzy.evolutionboost.client.model.ModModelLayers;
+import com.ichezzy.evolutionboost.config.ClientConfig;
 import com.ichezzy.evolutionboost.hud.DimBoostHudPayload;
+import com.ichezzy.evolutionboost.hud.HudTogglePayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 import java.util.EnumMap;
 import java.util.Locale;
@@ -20,16 +27,28 @@ import java.util.Locale;
  *   ein Dim-Boost > 1.0 aktiv ist.
  * - Position ist unterhalb der Cobblemon Party-Anzeige
  * - setzt alle Werte zurück bei Disconnect
+ * - empfängt HUD Toggle Commands vom Server
+ * - registriert Model Layers für Running Shoes
  */
 public final class EvolutionBoostClient implements ClientModInitializer {
 
     /** Pro Typ: Dimensionaler Multiplikator (aktuelle Dimension). */
     private static final EnumMap<BoostType, Double> DIM_MULTS = new EnumMap<>(BoostType.class);
+    
+    private static boolean trinketsClientInitialized = false;
 
     @Override
     public void onInitializeClient() {
+        // Client-Config laden
+        ClientConfig.get();
+
         // Defaultwerte setzen
         resetBoostValues();
+        
+        // --- Model Layers registrieren (für Running Shoes Rendering) ---
+        ModModelLayers.registerLayers((location, supplier) -> 
+                EntityModelLayerRegistry.registerModelLayer(location, supplier::get)
+        );
 
         // --- Bei Disconnect: alle Boost-Werte zurücksetzen ---
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
@@ -44,10 +63,13 @@ public final class EvolutionBoostClient implements ClientModInitializer {
             client.execute(() -> {
                 resetBoostValues();
                 EvolutionBoost.LOGGER.debug("[EvolutionBoost] Client joined server - reset boost HUD values.");
+                
+                // Trinkets Client Rendering initialisieren (nach World Load)
+                initTrinketsClient();
             });
         });
 
-        // --- Netzwerk-Receiver: nur Dim-Multiplikatoren ---
+        // --- Netzwerk-Receiver: Dim-Multiplikatoren ---
         ClientPlayNetworking.registerGlobalReceiver(
                 DimBoostHudPayload.TYPE,
                 (payload, context) -> {
@@ -63,19 +85,67 @@ public final class EvolutionBoostClient implements ClientModInitializer {
                 }
         );
 
+        // --- Netzwerk-Receiver: HUD Toggle vom Server ---
+        ClientPlayNetworking.registerGlobalReceiver(
+                HudTogglePayload.TYPE,
+                (payload, context) -> {
+                    Minecraft client = context.client();
+                    client.execute(() -> {
+                        switch (payload.action()) {
+                            case HudTogglePayload.ACTION_ON -> {
+                                ClientConfig.setHudEnabled(true);
+                                if (client.player != null) {
+                                    client.player.sendSystemMessage(Component.literal("✓ Boost HUD enabled")
+                                            .withStyle(ChatFormatting.GREEN));
+                                }
+                            }
+                            case HudTogglePayload.ACTION_OFF -> {
+                                ClientConfig.setHudEnabled(false);
+                                if (client.player != null) {
+                                    client.player.sendSystemMessage(Component.literal("✗ Boost HUD disabled")
+                                            .withStyle(ChatFormatting.RED));
+                                }
+                            }
+                            case HudTogglePayload.ACTION_STATUS -> {
+                                boolean enabled = ClientConfig.isHudEnabled();
+                                if (client.player != null) {
+                                    client.player.sendSystemMessage(Component.literal("✦ Boost HUD: ")
+                                            .withStyle(ChatFormatting.GOLD)
+                                            .append(Component.literal(enabled ? "ON" : "OFF")
+                                                    .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.RED)));
+                                    client.player.sendSystemMessage(Component.literal("  Use /eb hud on/off to toggle")
+                                            .withStyle(ChatFormatting.GRAY));
+                                }
+                            }
+                            case HudTogglePayload.ACTION_TOGGLE -> {
+                                boolean newState = !ClientConfig.isHudEnabled();
+                                ClientConfig.setHudEnabled(newState);
+                                if (client.player != null) {
+                                    client.player.sendSystemMessage(Component.literal(newState ? "✓ Boost HUD enabled" : "✗ Boost HUD disabled")
+                                            .withStyle(newState ? ChatFormatting.GREEN : ChatFormatting.RED));
+                                }
+                            }
+                        }
+                    });
+                }
+        );
+
         // --- HUD links rendern (Position passt sich an GUI-Scale an) ---
         HudRenderCallback.EVENT.register((GuiGraphics graphics, DeltaTracker deltaTracker) -> {
+            // HUD deaktiviert?
+            if (!ClientConfig.isHudEnabled()) return;
+
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null) return;
 
             // Nicht anzeigen wenn F3 Debug-Screen offen ist
             if (mc.getDebugOverlay().showDebugScreen()) return;
 
-            // Position: links, bei ca. 9% der Bildschirmhöhe (unterhalb Cobblemon Party)
-            // Dies sorgt dafür, dass die Position bei allen GUI-Scales konsistent ist
+            // Position aus Config
+            ClientConfig config = ClientConfig.get();
             int screenHeight = mc.getWindow().getGuiScaledHeight();
-            int x = 16;
-            int y = Math.max(30, (int)(screenHeight * 0.093)); // ~9.3% von oben, min 30
+            int x = config.hudX;
+            int y = Math.max(30, (int)(screenHeight * config.hudYPercent));
 
             for (BoostType type : BoostType.values()) {
                 double dim = DIM_MULTS.getOrDefault(type, 1.0D);
@@ -111,6 +181,22 @@ public final class EvolutionBoostClient implements ClientModInitializer {
     private static void resetBoostValues() {
         for (BoostType t : BoostType.values()) {
             DIM_MULTS.put(t, 1.0D);
+        }
+    }
+    
+    /**
+     * Initialisiert Trinkets Client Rendering (nur wenn Trinkets geladen ist).
+     */
+    private static void initTrinketsClient() {
+        if (trinketsClientInitialized) return;
+        
+        if (FabricLoader.getInstance().isModLoaded("trinkets")) {
+            try {
+                com.ichezzy.evolutionboost.compat.trinkets.TrinketsClientCompat.init();
+                trinketsClientInitialized = true;
+            } catch (NoClassDefFoundError e) {
+                EvolutionBoost.LOGGER.warn("[EvolutionBoost] Trinkets client classes not found - skipping renderer registration");
+            }
         }
     }
 }

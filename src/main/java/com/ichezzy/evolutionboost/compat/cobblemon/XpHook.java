@@ -111,9 +111,15 @@ public final class XpHook {
             return;
         }
 
-        // --- 4) Booster anwenden: GLOBAL × DIMENSION ---
+        // --- 4) Booster anwenden: GLOBAL × DIMENSION × XP_CHARM ---
         BoostManager bm = BoostManager.get(server);
         double mult = bm.getMultiplierFor(BoostType.XP, null, dimKey);
+        
+        // XP Charm Bonus (wenn Spieler bekannt)
+        if (player != null) {
+            double charmMult = com.ichezzy.evolutionboost.item.XPCharmItem.getXPMultiplier(player);
+            mult *= charmMult;
+        }
 
         if (DebugConfig.get().debugXpHook) {
             EvolutionBoost.LOGGER.info(

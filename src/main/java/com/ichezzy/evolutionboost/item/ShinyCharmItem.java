@@ -2,6 +2,7 @@ package com.ichezzy.evolutionboost.item;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -15,12 +16,11 @@ import net.minecraft.world.phys.AABB;
 import java.util.List;
 
 /**
- * Shiny Charm Item:
- * - Wenn ein Spieler dieses Item im Inventar hat, erhöht sich die Shiny-Chance
- *   für Pokémon-Spawns in seiner Nähe.
- * - Der Radius und Multiplikator sind in der Config einstellbar.
+ * Shiny Charm - increases shiny spawn chance in a radius around the player.
  */
 public class ShinyCharmItem extends Item {
+
+    private static final boolean TRINKETS_LOADED = FabricLoader.getInstance().isModLoaded("trinkets");
 
     public ShinyCharmItem(Properties properties) {
         super(properties);
@@ -32,44 +32,33 @@ public class ShinyCharmItem extends Item {
 
         EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
 
+        tooltip.add(Component.literal(""));
         tooltip.add(Component.literal("✨ Shiny Charm").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         tooltip.add(Component.literal(""));
 
         if (cfg.shinyCharmEnabled) {
-            tooltip.add(Component.literal("Increases Shiny chance for nearby spawns!")
+            tooltip.add(Component.literal("Increases Shiny chance for nearby spawns")
                     .withStyle(ChatFormatting.YELLOW));
-            tooltip.add(Component.literal("• Multiplier: x" + cfg.shinyCharmMultiplier)
+            tooltip.add(Component.literal("  • x" + cfg.shinyCharmMultiplier + " multiplier")
                     .withStyle(ChatFormatting.GRAY));
-            tooltip.add(Component.literal("• Radius: " + cfg.shinyCharmRadius + " blocks")
+            tooltip.add(Component.literal("  • " + cfg.shinyCharmRadius + " block radius")
                     .withStyle(ChatFormatting.GRAY));
-            tooltip.add(Component.literal(""));
-            tooltip.add(Component.literal("Keep in your inventory to activate!")
-                    .withStyle(ChatFormatting.GREEN));
         } else {
-            tooltip.add(Component.literal("Currently disabled.")
+            tooltip.add(Component.literal("Currently disabled")
                     .withStyle(ChatFormatting.RED));
         }
     }
 
     @Override
     public boolean isFoil(ItemStack stack) {
-        // Glänzender Effekt wie bei verzauberten Items
         return true;
     }
 
-    // ==================== Static Helper für ShinyHook ====================
+    // ==================== Static Helper ====================
 
-    /**
-     * Prüft, ob ein Spieler mit aktivem Shiny Charm in der Nähe der Position ist.
-     *
-     * @param level    Die ServerLevel in der der Spawn stattfindet
-     * @param spawnPos Die Position des Spawns
-     * @return Der Shiny Charm Multiplikator (1.0 wenn kein Charm in der Nähe)
-     */
     public static double getCharmMultiplierNear(ServerLevel level, net.minecraft.core.BlockPos spawnPos) {
         EvolutionBoostConfig cfg = EvolutionBoostConfig.get();
 
-        // Feature deaktiviert?
         if (!cfg.shinyCharmEnabled) {
             return 1.0;
         }
@@ -77,28 +66,22 @@ public class ShinyCharmItem extends Item {
         double radius = cfg.shinyCharmRadius > 0 ? cfg.shinyCharmRadius : 64.0;
         double multiplier = cfg.shinyCharmMultiplier > 0 ? cfg.shinyCharmMultiplier : 2.0;
 
-        // Suchbox um den Spawn-Punkt
         AABB searchBox = new AABB(
                 spawnPos.getX() - radius, spawnPos.getY() - radius, spawnPos.getZ() - radius,
                 spawnPos.getX() + radius, spawnPos.getY() + radius, spawnPos.getZ() + radius
         );
 
-        // Alle Spieler in der Box finden
         List<ServerPlayer> nearbyPlayers = level.getEntitiesOfClass(
                 ServerPlayer.class,
                 searchBox,
                 player -> !player.isSpectator()
         );
 
-        // Prüfen ob einer davon den Shiny Charm hat
         for (ServerPlayer player : nearbyPlayers) {
-            if (hasShinyCharmInInventory(player)) {
+            if (hasShinyCharm(player)) {
                 EvolutionBoost.LOGGER.debug(
-                        "[ShinyCharm] Player {} has Shiny Charm near spawn at {}, applying multiplier x{}",
-                        player.getName().getString(),
-                        spawnPos,
-                        multiplier
-                );
+                        "[ShinyCharm] Player {} has Shiny Charm near spawn at {}, applying x{}",
+                        player.getName().getString(), spawnPos, multiplier);
                 return multiplier;
             }
         }
@@ -107,10 +90,35 @@ public class ShinyCharmItem extends Item {
     }
 
     /**
-     * Prüft ob der Spieler einen Shiny Charm im Inventar hat.
+     * Checks if player has any Shiny Charm (permanent or 30d, inventory or trinkets).
      */
+    public static boolean hasShinyCharm(ServerPlayer player) {
+        // Permanent charm in inventory
+        if (hasShinyCharmInInventory(player)) {
+            return true;
+        }
+        
+        // Timed charm in inventory
+        if (TimedShinyCharmItem.hasActiveTimedShinyCharm(player)) {
+            return true;
+        }
+        
+        // Check trinkets
+        if (TRINKETS_LOADED) {
+            try {
+                if (com.ichezzy.evolutionboost.compat.trinkets.TrinketsCompat.hasShinyCharmTrinket(player)) {
+                    return true;
+                }
+                if (com.ichezzy.evolutionboost.compat.trinkets.TrinketsCompat.hasActiveTimedShinyCharm(player)) {
+                    return true;
+                }
+            } catch (NoClassDefFoundError | Exception ignored) {}
+        }
+        
+        return false;
+    }
+
     public static boolean hasShinyCharmInInventory(ServerPlayer player) {
-        // Haupt-Inventar durchsuchen
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
             if (!stack.isEmpty() && stack.getItem() instanceof ShinyCharmItem) {
@@ -120,10 +128,6 @@ public class ShinyCharmItem extends Item {
         return false;
     }
 
-    /**
-     * Prüft ob irgendein Spieler im Level einen Shiny Charm in der Nähe einer Entity hat.
-     * Convenience-Methode für den ShinyHook.
-     */
     public static double getCharmMultiplierNear(Entity entity) {
         if (!(entity.level() instanceof ServerLevel serverLevel)) {
             return 1.0;

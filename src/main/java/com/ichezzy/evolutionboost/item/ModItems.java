@@ -34,7 +34,7 @@ public final class ModItems {
     public static final Item EVOLUTION_COIN_PLATINUM = register(
             "evolution_coin_platinum",
             new SimpleTooltipItem(new Item.Properties().stacksTo(64).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.evolution_coin_platinum")
+                    "tooltip.evolutionboost.coin_platinum")
     );
 
     // ---- Halloween Platzhalter ----
@@ -320,10 +320,64 @@ public final class ModItems {
                     "tooltip.evolutionboost.wind_up_key")
     );
 
-    // ---- Safari / Voucher (Platzhalter) ----
+    // ---- Charms (Permanent) ----
     public static final Item SHINY_CHARM = register(
             "shiny_charm",
             new ShinyCharmItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
+    );
+
+    public static final Item XP_CHARM = register(
+            "xp_charm",
+            new XPCharmItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
+    );
+
+    // ---- Charms (30 Days) ----
+    public static final Item SHINY_CHARM_30D = register(
+            "shiny_charm_30d",
+            new TimedShinyCharmItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE), 30)
+    );
+
+    public static final Item XP_CHARM_30D = register(
+            "xp_charm_30d",
+            new TimedXPCharmItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE), 30)
+    );
+
+    // ---- Running Shoes (Permanent) ----
+    public static final Item RUNNING_SHOES = register(
+            "running_shoes",
+            new RunningBootsItem(RunningBootsItem.Tier.NORMAL, 
+                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON))
+    );
+
+    public static final Item GREAT_RUNNING_SHOES = register(
+            "great_running_shoes",
+            new RunningBootsItem(RunningBootsItem.Tier.GREAT,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.RARE))
+    );
+
+    public static final Item ULTRA_RUNNING_SHOES = register(
+            "ultra_running_shoes",
+            new RunningBootsItem(RunningBootsItem.Tier.ULTRA,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
+    );
+
+    // ---- Running Shoes (30 Days) ----
+    public static final Item RUNNING_SHOES_30D = register(
+            "running_shoes_30d",
+            new TimedRunningBootsItem(RunningBootsItem.Tier.NORMAL,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.COMMON), 30)
+    );
+
+    public static final Item GREAT_RUNNING_SHOES_30D = register(
+            "great_running_shoes_30d",
+            new TimedRunningBootsItem(RunningBootsItem.Tier.GREAT,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON), 30)
+    );
+
+    public static final Item ULTRA_RUNNING_SHOES_30D = register(
+            "ultra_running_shoes_30d",
+            new TimedRunningBootsItem(RunningBootsItem.Tier.ULTRA,
+                    new Item.Properties().stacksTo(1).rarity(Rarity.RARE), 30)
     );
 
     // FUNKTIONALES Ticket (60 Minuten)
@@ -341,32 +395,139 @@ public final class ModItems {
 
     public static final Item EVENT_VOUCHER_IV = register(
             "event_voucher_iv",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.RARE),
-                    "tooltip.evolutionboost.voucher_iv")
+            EventVoucherItem.forIV(new Item.Properties().stacksTo(1).rarity(Rarity.RARE))
     );
 
     public static final Item EVENT_VOUCHER_XP = register(
             "event_voucher_xp",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.voucher_xp")
+            EventVoucherItem.forXP(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
     );
 
     public static final Item EVENT_VOUCHER_SHINY = register(
             "event_voucher_shiny",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.voucher_shiny")
-    );
-
-    public static final Item EVENT_VOUCHER_DROP = register(
-            "event_voucher_drop",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.voucher_drop")
+            EventVoucherItem.forShiny(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
     );
 
     public static final Item EVENT_VOUCHER_EV = register(
             "event_voucher_ev",
-            new SimpleTooltipItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC),
-                    "tooltip.evolutionboost.voucher_ev")
+            EventVoucherItem.forEV(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
+    );
+
+    // ---- Super EV Items ----
+    public static final Item SUPER_HP_UP = register(
+            "super_hp_up",
+            SuperEVItem.forHP(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item SUPER_PROTEIN = register(
+            "super_protein",
+            SuperEVItem.forAttack(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item SUPER_IRON = register(
+            "super_iron",
+            SuperEVItem.forDefense(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item SUPER_CALCIUM = register(
+            "super_calcium",
+            SuperEVItem.forSpAttack(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item SUPER_ZINC = register(
+            "super_zinc",
+            SuperEVItem.forSpDefense(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item SUPER_CARBOS = register(
+            "super_carbos",
+            SuperEVItem.forSpeed(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    // Basis-Item für Shop Bundles
+    public static final Item SUPER_MEDICINE = register(
+            "super_medicine",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.super_medicine")
+    );
+
+    // EV Reset Item
+    public static final Item RESET_MEDICINE = register(
+            "reset_medicine",
+            new EVResetItem(new Item.Properties().stacksTo(16).rarity(Rarity.EPIC))
+    );
+
+    // ---- Bottle Caps ----
+    public static final Item BOTTLE_CAP_SILVER = register(
+            "bottle_cap_silver",
+            BottleCapItem.silver(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item BOTTLE_CAP_GOLD = register(
+            "bottle_cap_gold",
+            BottleCapItem.gold(new Item.Properties().stacksTo(16).rarity(Rarity.EPIC))
+    );
+
+    public static final Item BOTTLE_CAP_COPPER = register(
+            "bottle_cap_copper",
+            BottleCapItem.copper(new Item.Properties().stacksTo(16).rarity(Rarity.UNCOMMON))
+    );
+
+    public static final Item BOTTLE_CAP_HP = register(
+            "bottle_cap_hp",
+            BottleCapItem.forStat(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    BottleCapItem.CapType.HP, "tooltip.evolutionboost.bottle_cap_hp")
+    );
+
+    public static final Item BOTTLE_CAP_ATK = register(
+            "bottle_cap_atk",
+            BottleCapItem.forStat(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    BottleCapItem.CapType.ATK, "tooltip.evolutionboost.bottle_cap_atk")
+    );
+
+    public static final Item BOTTLE_CAP_DEF = register(
+            "bottle_cap_def",
+            BottleCapItem.forStat(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    BottleCapItem.CapType.DEF, "tooltip.evolutionboost.bottle_cap_def")
+    );
+
+    public static final Item BOTTLE_CAP_SPATK = register(
+            "bottle_cap_spatk",
+            BottleCapItem.forStat(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    BottleCapItem.CapType.SPATK, "tooltip.evolutionboost.bottle_cap_spatk")
+    );
+
+    public static final Item BOTTLE_CAP_SPDEF = register(
+            "bottle_cap_spdef",
+            BottleCapItem.forStat(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    BottleCapItem.CapType.SPDEF, "tooltip.evolutionboost.bottle_cap_spdef")
+    );
+
+    public static final Item BOTTLE_CAP_SPEED = register(
+            "bottle_cap_speed",
+            BottleCapItem.forStat(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    BottleCapItem.CapType.SPEED, "tooltip.evolutionboost.bottle_cap_speed")
+    );
+
+    public static final Item BOTTLE_CAP_VOID = register(
+            "bottle_cap_void",
+            BottleCapItem.voidCap(new Item.Properties().stacksTo(16).rarity(Rarity.EPIC))
+    );
+
+    // ---- Swappers ----
+    public static final Item SHINY_SWAPPER = register(
+            "shiny_swapper",
+            new ShinySwapperItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
+    );
+
+    public static final Item GENDER_SWAPPER = register(
+            "gender_swapper",
+            new GenderSwapperItem(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
+    );
+
+    public static final Item CAUGHT_BALL_SWAPPER = register(
+            "caught_ball_swapper",
+            new CaughtBallSwapperItem(new Item.Properties().stacksTo(16).rarity(Rarity.RARE))
     );
 
     // ---- Blocks as Items ----

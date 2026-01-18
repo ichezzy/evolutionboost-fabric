@@ -61,6 +61,8 @@ repositories {
     maven("https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/")
     maven("https://maven.impactdev.net/repository/development/")
     maven("https://maven.impactdev.net/repository/maven-releases/")
+    maven("https://maven.terraformersmc.com/")
+    maven("https://maven.ladysnake.org/releases")
     mavenLocal()
 }
 
@@ -89,6 +91,9 @@ dependencies {
     // --- Tests (optional) ---
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
+
+    // Trinkets Compile Only
+    modCompileOnly("dev.emi:trinkets:3.10.0")
 }
 
 tasks.processResources {

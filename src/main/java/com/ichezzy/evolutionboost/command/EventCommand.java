@@ -1,101 +1,78 @@
 package com.ichezzy.evolutionboost.command;
 
-import com.ichezzy.evolutionboost.configs.EvolutionBoostConfig;
-import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.item.TicketManager;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.commands.arguments.DimensionArgument;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
 
-public final class EventCommand {
-    private EventCommand(){}
+/**
+ * Event-Kommandos für EvolutionBoost.
+ * 
+ * /eb event safari return - Verlässt die Safari Zone vorzeitig
+ */
+public class EventCommand {
 
-    public static void register(CommandDispatcher<CommandSourceStack> d) {
-        var subtree = Commands.literal("event")
-                // Nur OP oder Spieler mit evolutionboost.event
-                .requires(src -> EvolutionboostPermissions.check(src, "evolutionboost.event", 2, false))
-
-                // /eb event tp <dimension> - Einfacher Teleport zum Event-Spawn (keine Session)
-                .then(Commands.literal("tp")
-                        .then(Commands.argument("dimension", DimensionArgument.dimension())
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        LiteralArgumentBuilder<CommandSourceStack> eventTree = Commands.literal("event")
+                // /eb event safari
+                .then(Commands.literal("safari")
+                        // /eb event safari return
+                        .then(Commands.literal("return")
                                 .executes(ctx -> {
-                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                                    ServerLevel dst = DimensionArgument.getDimension(ctx, "dimension");
-
-                                    // Versuche Target aus der Dimension zu ermitteln
-                                    TicketManager.Target tgt = TicketManager.Target.from(dst.dimension().location().getPath());
-
-                                    BlockPos spawnPos;
-                                    if (tgt != null) {
-                                        // Bekanntes Event-Ziel -> nutze konfigurierten Spawn
-                                        spawnPos = TicketManager.getSpawn(tgt);
-                                    } else {
-                                        // Unbekannte Dimension -> prüfe ob event:* Namespace
-                                        if (!dst.dimension().location().getNamespace().equals("event")) {
-                                            ctx.getSource().sendFailure(Component.literal("[EventTP] Only 'event:*' dimensions are allowed."));
-                                            return 0;
-                                        }
-                                        // Fallback: versuche Spawn aus Config zu laden oder nutze Default
-                                        String dimPath = dst.dimension().location().getPath();
-                                        EvolutionBoostConfig.Spawn configSpawn = EvolutionBoostConfig.get().getSpawn(dimPath);
-                                        if (configSpawn != null) {
-                                            spawnPos = configSpawn.toBlockPos();
-                                        } else {
-                                            // Default Spawn für unbekannte Event-Dimensionen
-                                            spawnPos = new BlockPos(0, 80, 0);
-                                        }
+                                    if (!(ctx.getSource().getEntity() instanceof ServerPlayer player)) {
+                                        ctx.getSource().sendFailure(Component.literal("This command can only be used by players."));
+                                        return 0;
                                     }
+                                    return safariReturn(player);
+                                })));
 
-                                    // Einfacher Teleport - KEINE Session, KEIN Speichern der Rückkehr-Position
-                                    p.teleportTo(dst, spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, p.getYRot(), p.getXRot());
-
-                                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Teleported to " + dst.dimension().location() + "."), false);
-                                    return 1;
-                                })
-                        )
-                )
-
-                // /eb event return - Teleportiert zum Overworld-Spawn (nicht zur gespeicherten Position)
-                .then(Commands.literal("return").executes(ctx -> {
-                    ServerPlayer p = ctx.getSource().getPlayerOrException();
-                    ServerLevel overworld = p.server.getLevel(Level.OVERWORLD);
-
-                    if (overworld == null) {
-                        ctx.getSource().sendFailure(Component.literal("[EventTP] Could not find Overworld."));
-                        return 0;
-                    }
-
-                    // Teleport zum Overworld-Spawnpunkt
-                    BlockPos spawnPos = overworld.getSharedSpawnPos();
-                    p.teleportTo(overworld, spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, p.getYRot(), p.getXRot());
-
-                    ctx.getSource().sendSuccess(() -> Component.literal("[EventTP] Returned to Overworld spawn."), false);
-                    return 1;
-                }))
-
-                // setspawn: /eb event setspawn <halloween|safari|christmas>
-                .then(Commands.literal("setspawn")
-                        .then(Commands.literal("halloween").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.HALLOWEEN)))
-                        .then(Commands.literal("safari").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.SAFARI)))
-                        .then(Commands.literal("christmas").executes(ctx -> setSpawn(ctx.getSource(), TicketManager.Target.CHRISTMAS)))
-                );
-
-        // unter /evolutionboost und /eb aufhängen
-        d.register(Commands.literal("evolutionboost").then(subtree));
-        d.register(Commands.literal("eb").then(subtree));
+        // Unter /eb und /evolutionboost registrieren
+        dispatcher.register(Commands.literal("eb").then(eventTree));
+        dispatcher.register(Commands.literal("evolutionboost").then(eventTree.build()));
     }
 
-    private static int setSpawn(CommandSourceStack src, TicketManager.Target t) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer p = src.getPlayerOrException();
-        var pos = p.blockPosition();
-        TicketManager.setSpawn(t, pos);
-        src.sendSuccess(() -> Component.literal("[EventTP] " + t.key() + " spawn set to " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
-        return 1;
+    /**
+     * Verlässt die Safari Zone vorzeitig.
+     */
+    private static int safariReturn(ServerPlayer player) {
+        // Prüfen ob Spieler in der Safari Zone ist
+        String currentDim = player.level().dimension().location().toString();
+        if (!currentDim.equals("event:safari_zone")) {
+            player.sendSystemMessage(Component.literal("✗ You are not in the Safari Zone!")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        // Prüfen ob eine aktive Session existiert
+        TicketManager.Session session = TicketManager.getSession(player.getUUID());
+        if (session == null) {
+            player.sendSystemMessage(Component.literal("✗ You don't have an active Safari session!")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        // Prüfen ob die Session wirklich für Safari ist
+        if (session.target != TicketManager.Target.SAFARI) {
+            player.sendSystemMessage(Component.literal("✗ Your current session is not for the Safari Zone!")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        // Session vorzeitig beenden
+        if (TicketManager.endSessionEarly(player)) {
+            player.sendSystemMessage(Component.literal("✓ You have left the Safari Zone early.")
+                    .withStyle(ChatFormatting.GREEN));
+            player.sendSystemMessage(Component.literal("  Thanks for visiting!")
+                    .withStyle(ChatFormatting.GRAY));
+            return 1;
+        } else {
+            player.sendSystemMessage(Component.literal("✗ Failed to end Safari session.")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
     }
 }

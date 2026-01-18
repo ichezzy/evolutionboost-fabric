@@ -5,25 +5,28 @@ import com.ichezzy.evolutionboost.boost.BoostManager;
 import com.ichezzy.evolutionboost.command.AdminCommand;
 import com.ichezzy.evolutionboost.command.BoostCommand;
 import com.ichezzy.evolutionboost.command.DexCommand;
-import com.ichezzy.evolutionboost.command.EventCommand;
 import com.ichezzy.evolutionboost.command.HelpCommand;
+import com.ichezzy.evolutionboost.command.HudCommand;
 import com.ichezzy.evolutionboost.command.NotificationCommand;
 import com.ichezzy.evolutionboost.command.QuestCommand;
 import com.ichezzy.evolutionboost.command.RewardCommand;
 import com.ichezzy.evolutionboost.command.WeatherCommand;
 import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
-import com.ichezzy.evolutionboost.configs.CommandLogConfig;
 import com.ichezzy.evolutionboost.configs.NotificationConfig;
 import com.ichezzy.evolutionboost.dex.DexCatchHook;
 import com.ichezzy.evolutionboost.dex.DexDataManager;
 import com.ichezzy.evolutionboost.hud.BoostHudSync;
 import com.ichezzy.evolutionboost.hud.DimBoostHudPayload;
+import com.ichezzy.evolutionboost.hud.HudTogglePayload;
 import com.ichezzy.evolutionboost.item.ModItemGroup;
 import com.ichezzy.evolutionboost.item.ModItems;
 import com.ichezzy.evolutionboost.item.TicketManager;
 import com.ichezzy.evolutionboost.logging.CommandLogManager;
 import com.ichezzy.evolutionboost.permission.PermissionRegistry;
 import com.ichezzy.evolutionboost.quest.QuestManager;
+import com.ichezzy.evolutionboost.quest.random.RandomQuestHook;
+import com.ichezzy.evolutionboost.quest.random.RandomQuestManager;
+import com.ichezzy.evolutionboost.quest.random.RandomQuestScheduler;
 import com.ichezzy.evolutionboost.compat.cobblemon.QuestBattleHook;
 import com.ichezzy.evolutionboost.compat.cobblemon.QuestCatchHook;
 import com.ichezzy.evolutionboost.compat.cobblemon.QuestItemHook;
@@ -66,6 +69,8 @@ public class EvolutionBoost implements ModInitializer {
         // ---- Netzwerk-Payloads registrieren ----
         // S2C: Dim-Boost-HUD (schickt pro BoostType den Dimensional-Multiplikator)
         PayloadTypeRegistry.playS2C().register(DimBoostHudPayload.TYPE, DimBoostHudPayload.CODEC);
+        // S2C: HUD Toggle (Client soll HUD an/aus schalten)
+        PayloadTypeRegistry.playS2C().register(HudTogglePayload.TYPE, HudTogglePayload.STREAM_CODEC);
 
         // ---- Blocks & Items & Creative Tab ----
         ModBlocks.registerAll();
@@ -89,11 +94,11 @@ public class EvolutionBoost implements ModInitializer {
                     AdminCommand.register(d);
                     RewardCommand.register(d);
                     BoostCommand.register(d);
-                    EventCommand.register(d);
                     WeatherCommand.register(d);
                     QuestCommand.register(d);
                     DexCommand.register(d);
                     NotificationCommand.register(d);
+                    HudCommand.register(d);
                 }
         );
 
@@ -102,8 +107,7 @@ public class EvolutionBoost implements ModInitializer {
 
         // ---- Logging früh aktivieren ----
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            CommandLogConfig cfg = CommandLogConfig.loadOrCreate();
-            CommandLogManager.init(cfg);
+            CommandLogManager.init();
             LOGGER.info("[{}] Command logging initialized", MOD_ID);
         });
 
@@ -113,7 +117,18 @@ public class EvolutionBoost implements ModInitializer {
             RewardManager.init(server);
             BoostManager.get(server); // init/load
             QuestManager.get().init(server); // Quest-System initialisieren
+            RandomQuestManager.get().init(server); // Random Quest System initialisieren
+            RandomQuestScheduler.register(); // Reset-Benachrichtigungen registrieren
             DexDataManager.init(server); // Pokédex-Daten initialisieren
+
+            // Trinkets-Kompatibilität initialisieren (falls Trinkets geladen)
+            if (FabricLoader.getInstance().isModLoaded("trinkets")) {
+                try {
+                    com.ichezzy.evolutionboost.compat.trinkets.TrinketsCompat.init();
+                } catch (NoClassDefFoundError e) {
+                    LOGGER.warn("Trinkets mod detected but classes not found - skipping integration");
+                }
+            }
 
             if (FabricLoader.getInstance().isModLoaded("cobblemon")) {
                 HooksRegistrar.register(server);
@@ -121,9 +136,11 @@ public class EvolutionBoost implements ModInitializer {
                 QuestBattleHook.register();
                 QuestCatchHook.register();
                 QuestItemHook.register();
+                // Random Quest Hook registrieren
+                RandomQuestHook.register();
                 // Pokédex-Hook registrieren
                 DexCatchHook.register();
-                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest & Dex hooks)");
+                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest, Random Quest & Dex hooks)");
             } else {
                 LOGGER.warn("Cobblemon not detected – hooks skipped");
             }
@@ -134,7 +151,7 @@ public class EvolutionBoost implements ModInitializer {
         // ---- Stop/Cleanup ----
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             NotificationConfig.shutdown();
-            CommandLogManager.close();
+            CommandLogManager.shutdown();
             safeUnregister(server);
         });
 
@@ -154,6 +171,7 @@ public class EvolutionBoost implements ModInitializer {
                             if (onlinePlayer != null) {
                                 QuestManager.get().notifyAvailableQuests(onlinePlayer);
                                 QuestManager.get().notifyReadyToTurnIn(onlinePlayer); // Turn-in Hinweise
+                                RandomQuestManager.get().notifyOnLogin(onlinePlayer); // Random Quest Hinweise
                                 DexDataManager.notifyOnJoin(onlinePlayer);
                             }
                         });
@@ -230,6 +248,7 @@ public class EvolutionBoost implements ModInitializer {
         }
         RewardManager.saveAll();
         QuestManager.get().shutdown(); // Quest-Daten speichern
+        RandomQuestManager.get().shutdown(); // Random Quest-Daten speichern
         DexDataManager.shutdown(); // Pokédex-Daten speichern
     }
 }

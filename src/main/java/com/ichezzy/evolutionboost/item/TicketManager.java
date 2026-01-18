@@ -321,7 +321,8 @@ public final class TicketManager {
                             long sec = sess.ticksLeft / 20L;
                             long mm = sec / 60L;
                             long ss = sec % 60L;
-                            String txt = String.format("[Event Timer] %02d:%02d", mm, ss);
+                            String timerLabel = getTimerLabel(sess.target);
+                            String txt = String.format("[%s] %02d:%02d", timerLabel, mm, ss);
                             p.displayClientMessage(Component.literal(txt).withStyle(ChatFormatting.GOLD), true);
                         }
                     }
@@ -387,5 +388,35 @@ public final class TicketManager {
         if (back == null) back = server.overworld();
         p.teleportTo(back, sess.rx, sess.ry, sess.rz, sess.ryaw, sess.rpitch);
         p.setGameMode(sess.previousMode);
+    }
+
+    /**
+     * Gibt den Timer-Label für eine bestimmte Ziel-Dimension zurück.
+     */
+    private static String getTimerLabel(Target target) {
+        return switch (target) {
+            case SAFARI -> "Time left in the Safari Zone";
+            case HALLOWEEN -> "Time left in the Halloween Event";
+            case CHRISTMAS -> "Time left in the Christmas Event";
+        };
+    }
+
+    /**
+     * Gibt die aktive Session für einen Spieler zurück.
+     */
+    public static Session getSession(UUID id) {
+        return ACTIVE.get(id);
+    }
+
+    /**
+     * Beendet eine Session für einen Spieler vorzeitig.
+     * @return true wenn erfolgreich, false wenn keine Session existiert
+     */
+    public static boolean endSessionEarly(ServerPlayer player) {
+        Session sess = ACTIVE.remove(player.getUUID());
+        if (sess == null) return false;
+        restore(player.server, player, sess);
+        saveSessions();
+        return true;
     }
 }

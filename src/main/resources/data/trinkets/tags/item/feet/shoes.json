@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "evolutionboost:running_shoes",
+    "evolutionboost:great_running_shoes",
+    "evolutionboost:ultra_running_shoes",
+    "evolutionboost:running_shoes_30d",
+    "evolutionboost:great_running_shoes_30d",
+    "evolutionboost:ultra_running_shoes_30d"
+  ]
+}

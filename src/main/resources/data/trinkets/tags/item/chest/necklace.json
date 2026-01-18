@@ -1,0 +1,9 @@
+{
+  "replace": false,
+  "values": [
+    "evolutionboost:shiny_charm",
+    "evolutionboost:shiny_charm_30d",
+    "evolutionboost:xp_charm",
+    "evolutionboost:xp_charm_30d"
+  ]
+}

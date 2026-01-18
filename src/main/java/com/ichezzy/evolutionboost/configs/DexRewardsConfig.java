@@ -185,7 +185,7 @@ public final class DexRewardsConfig {
 
     public static synchronized DexRewardsConfig loadOrCreate() {
         try {
-            Path dir = Path.of("config", "evolutionboost");
+            Path dir = Path.of("config", "evolutionboost", "rewards");
             Files.createDirectories(dir);
             Path file = dir.resolve("dex_rewards.json");
 
@@ -216,7 +216,7 @@ public final class DexRewardsConfig {
     public static synchronized void save() {
         if (INSTANCE == null) return;
         try {
-            Path dir = Path.of("config", "evolutionboost");
+            Path dir = Path.of("config", "evolutionboost", "rewards");
             Files.createDirectories(dir);
             Path file = dir.resolve("dex_rewards.json");
             try (BufferedWriter bw = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {

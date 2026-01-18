@@ -2,6 +2,7 @@ package com.ichezzy.evolutionboost.command;
 
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,102 +12,115 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 
 /**
- * /eb help - Zeigt alle verfügbaren Commands basierend auf Berechtigungen.
+ * /eb help - Shows all available commands with pagination.
  */
 public final class HelpCommand {
     private HelpCommand() {}
 
+    private static final int LINES_PER_PAGE = 12;
+
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         var helpTree = Commands.literal("help")
                 .executes(ctx -> showHelp(ctx.getSource(), 1))
+                .then(Commands.argument("page", IntegerArgumentType.integer(1, 10))
+                        .executes(ctx -> showHelp(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "page"))))
                 .then(Commands.literal("boost")
                         .executes(ctx -> showBoostHelp(ctx.getSource())))
-                .then(Commands.literal("event")
-                        .executes(ctx -> showEventHelp(ctx.getSource())))
-                .then(Commands.literal("rewards")
-                        .executes(ctx -> showRewardsHelp(ctx.getSource())))
-                .then(Commands.literal("weather")
-                        .executes(ctx -> showWeatherHelp(ctx.getSource())))
                 .then(Commands.literal("quest")
                         .executes(ctx -> showQuestHelp(ctx.getSource())))
                 .then(Commands.literal("dex")
-                        .executes(ctx -> showDexHelp(ctx.getSource())));
+                        .executes(ctx -> showDexHelp(ctx.getSource())))
+                .then(Commands.literal("admin")
+                        .executes(ctx -> showAdminHelp(ctx.getSource())))
+                .then(Commands.literal("rewards")
+                        .executes(ctx -> showRewardsHelp(ctx.getSource())))
+                .then(Commands.literal("weather")
+                        .executes(ctx -> showWeatherHelp(ctx.getSource())));
 
         d.register(Commands.literal("evolutionboost").then(helpTree));
         d.register(Commands.literal("eb").then(helpTree.build()));
     }
 
+    // ==================== Main Help with Pages ====================
+
     private static int showHelp(CommandSourceStack src, int page) {
-        src.sendSuccess(() -> header("EvolutionBoost Help"), false);
-        src.sendSuccess(() -> Component.literal("Use /eb help <topic> for details").withStyle(ChatFormatting.GRAY), false);
-        src.sendSuccess(() -> Component.empty(), false);
+        int totalPages = 3;
+        final int currentPage = Math.max(1, Math.min(page, totalPages));
 
-        // Player Commands (everyone)
-        src.sendSuccess(() -> section("Player Commands"), false);
-        sendCmd(src, "/eb quest active", "Show your active quests", null);
-        sendCmd(src, "/eb quest progress", "Show quest progress", null);
-        sendCmd(src, "/eb quest info <id>", "Show quest details", null);
+        src.sendSuccess(() -> header("EvolutionBoost Help (" + currentPage + "/" + totalPages + ")"), false);
 
-        // Admin - Boost
-        if (hasPermission(src, "evolutionboost.boost", 2)) {
-            src.sendSuccess(() -> Component.empty(), false);
-            src.sendSuccess(() -> section("Boost Commands").append(clickable(" [details]", "/eb help boost", "Click for boost help")), false);
-            sendCmd(src, "/eb boost add global <type> <mult> <time>", "Add global boost", "evolutionboost.boost");
-            sendCmd(src, "/eb boost add dim <dim> <type> <mult>", "Set dimension boost", "evolutionboost.boost");
-            sendCmd(src, "/eb boost clear ...", "Clear boosts", "evolutionboost.boost");
+        switch (currentPage) {
+            case 1 -> showPage1(src);
+            case 2 -> showPage2(src);
+            case 3 -> showPage3(src);
         }
 
-        // Admin - Event
-        if (hasPermission(src, "evolutionboost.event", 2)) {
-            src.sendSuccess(() -> Component.empty(), false);
-            src.sendSuccess(() -> section("Event Commands").append(clickable(" [details]", "/eb help event", "Click for event help")), false);
-            sendCmd(src, "/eb event spawn <id> <player>", "Spawn event entity", "evolutionboost.event");
-            sendCmd(src, "/eb event npc <action> ...", "Manage event NPCs", "evolutionboost.event");
+        // Navigation
+        MutableComponent nav = Component.literal("  ");
+        if (currentPage > 1) {
+            nav.append(clickable("[< Prev]", "/eb help " + (currentPage - 1), "Previous page"))
+                    .append(Component.literal(" ").withStyle(ChatFormatting.GRAY));
         }
-
-        // Admin - Rewards
-        if (hasPermission(src, "evolutionboost.rewards", 2)) {
-            src.sendSuccess(() -> Component.empty(), false);
-            src.sendSuccess(() -> section("Reward Commands").append(clickable(" [details]", "/eb help rewards", "Click for rewards help")), false);
-            sendCmd(src, "/eb rewards set <player> <type> <value>", "Set reward eligibility", "evolutionboost.rewards");
-            sendCmd(src, "/eb rewards list <type>", "List eligible players", "evolutionboost.rewards");
-            sendCmd(src, "/eb rewards reload", "Reload reward configs", "evolutionboost.rewards");
+        nav.append(Component.literal("Page " + currentPage + "/" + totalPages).withStyle(ChatFormatting.GRAY));
+        if (currentPage < totalPages) {
+            nav.append(Component.literal(" ").withStyle(ChatFormatting.GRAY))
+                    .append(clickable("[Next >]", "/eb help " + (currentPage + 1), "Next page"));
         }
-
-        // Admin - Weather
-        if (hasPermission(src, "evolutionboost.weather", 2)) {
-            src.sendSuccess(() -> Component.empty(), false);
-            src.sendSuccess(() -> section("Weather Commands").append(clickable(" [details]", "/eb help weather", "Click for weather help")), false);
-            sendCmd(src, "/eb weather christmas enable/disable", "Toggle weather system", "evolutionboost.weather");
-            sendCmd(src, "/eb weather christmas storm on/off", "Toggle blizzard", "evolutionboost.weather");
-            sendCmd(src, "/eb weather christmas auto on/off", "Toggle auto-cycle", "evolutionboost.weather");
-        }
-
-        // Admin - Quest
-        if (hasPermission(src, "evolutionboost.quest.admin", 2)) {
-            src.sendSuccess(() -> Component.empty(), false);
-            src.sendSuccess(() -> section("Quest Admin Commands").append(clickable(" [details]", "/eb help quest", "Click for quest help")), false);
-            sendCmd(src, "/eb quest <line> <id> activate <player>", "Activate quest", "evolutionboost.quest.admin");
-            sendCmd(src, "/eb quest <line> <id> complete <player>", "Complete quest", "evolutionboost.quest.admin");
-        }
-
-        // Pokédex Rewards (everyone can see)
-        src.sendSuccess(() -> Component.empty(), false);
-        src.sendSuccess(() -> section("Pokédex Commands").append(clickable(" [details]", "/eb help dex", "Click for dex help")), false);
-        sendCmd(src, "/eb dex info", "Show your Pokédex progress", null);
-        sendCmd(src, "/eb dex claim <milestone>", "Claim a milestone reward", null);
-        sendCmd(src, "/eb dex list", "List all milestones", null);
-
-        // Notifications (everyone can see)
-        src.sendSuccess(() -> Component.empty(), false);
-        src.sendSuccess(() -> section("Notifications"), false);
-        sendCmd(src, "/eb notifications", "Show notification settings", null);
-        sendCmd(src, "/eb notifications on/off <type>", "Toggle notifications (all/rewards/dex/quests)", null);
-
-        src.sendSuccess(() -> Component.empty(), false);
+        src.sendSuccess(() -> nav, false);
         src.sendSuccess(() -> footer(), false);
 
         return 1;
+    }
+
+    private static void showPage1(CommandSourceStack src) {
+        src.sendSuccess(() -> Component.literal("Use /eb help <topic> for details")
+                .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
+        src.sendSuccess(() -> Component.literal("Topics: boost, quest, dex, admin, rewards, weather")
+                .withStyle(ChatFormatting.DARK_GRAY), false);
+        src.sendSuccess(() -> Component.empty(), false);
+
+        // Player Commands
+        src.sendSuccess(() -> section("Player Commands"), false);
+        sendCmd(src, "/eb boost info", "Show all active boosts", null);
+        sendCmd(src, "/eb quest daily/weekly/monthly", "View random quests", null);
+        sendCmd(src, "/eb quest turnin <type>", "Turn in completed quest", null);
+        sendCmd(src, "/eb dex info", "Show Pokédex progress", null);
+        sendCmd(src, "/eb dex claim <milestone>", "Claim milestone reward", null);
+        sendCmd(src, "/eb hud on/off", "Toggle boost HUD", null);
+    }
+
+    private static void showPage2(CommandSourceStack src) {
+        // Notification Commands
+        src.sendSuccess(() -> section("Notifications"), false);
+        sendCmd(src, "/eb notifications", "Show notification settings", null);
+        sendCmd(src, "/eb notifications on/off <type>", "Toggle (all/rewards/dex/quests)", null);
+        src.sendSuccess(() -> Component.empty(), false);
+
+        // Story Quests
+        src.sendSuccess(() -> section("Story Quests"), false);
+        sendCmd(src, "/eb quest active", "Show active quests", null);
+        sendCmd(src, "/eb quest progress", "Show quest progress", null);
+        sendCmd(src, "/eb quest info <id>", "Show quest details", null);
+    }
+
+    private static void showPage3(CommandSourceStack src) {
+        // Admin Commands (permission gated)
+        if (hasPermission(src, "evolutionboost.boost", 2)) {
+            src.sendSuccess(() -> section("Admin: Boosts").append(clickable(" [details]", "/eb help boost", "Click")), false);
+            sendCmd(src, "/eb boost add global <type> <mult> <time>", "Add global boost", "evolutionboost.boost");
+            sendCmd(src, "/eb boost clear all", "Clear all boosts", "evolutionboost.boost");
+        }
+
+        if (hasPermission(src, "evolutionboost.admin", 3)) {
+            src.sendSuccess(() -> section("Admin: Server").append(clickable(" [details]", "/eb help admin", "Click")), false);
+            sendCmd(src, "/eb admin tp <dimension>", "Teleport to dimension", "evolutionboost.admin");
+            sendCmd(src, "/eb admin return", "Return to spawn", "evolutionboost.admin");
+        }
+
+        if (hasPermission(src, "evolutionboost.quest.admin", 2)) {
+            src.sendSuccess(() -> section("Admin: Quests").append(clickable(" [details]", "/eb help quest", "Click")), false);
+            sendCmd(src, "/eb quest admin ...", "Quest administration", "evolutionboost.quest.admin");
+        }
     }
 
     // ==================== Topic Help ====================
@@ -114,99 +128,25 @@ public final class HelpCommand {
     private static int showBoostHelp(CommandSourceStack src) {
         src.sendSuccess(() -> header("Boost Commands"), false);
 
-        src.sendSuccess(() -> section("Add Boosts"), false);
-        sendCmdDetail(src, "/eb boost add global <type> <mult> <value> <unit>",
-                "Add a temporary global boost",
-                "Types: SHINY, EV, IV, HA, CATCH",
-                "Units: s, m, h, d (seconds, minutes, hours, days)",
-                "Example: /eb boost add global SHINY 2.0 30 m");
+        src.sendSuccess(() -> section("Player"), false);
+        sendCmdDetail(src, "/eb boost info", "Show all active global boosts");
 
-        sendCmdDetail(src, "/eb boost add dim <dimension> <type> <mult>",
-                "Set a permanent dimension multiplier",
-                "Example: /eb boost add dim minecraft:the_nether SHINY 1.5");
+        if (hasPermission(src, "evolutionboost.boost", 2)) {
+            src.sendSuccess(() -> section("Admin - Add Boosts"), false);
+            sendCmdDetail(src, "/eb boost add global <type> <mult> <value> <unit>",
+                    "Add temporary global boost",
+                    "Types: SHINY, XP, EV, IV",
+                    "Units: s, m, h, d",
+                    "Example: /eb boost add global SHINY 2.0 1 h");
+            sendCmdDetail(src, "/eb boost add dim <dimension> <type> <mult>",
+                    "Set permanent dimension multiplier",
+                    "Example: /eb boost add dim minecraft:the_nether SHINY 1.5");
 
-        src.sendSuccess(() -> section("Clear Boosts"), false);
-        sendCmdDetail(src, "/eb boost clear all", "Clear all active global boosts");
-        sendCmdDetail(src, "/eb boost clear global [type]", "Clear global boosts (optionally by type)");
-        sendCmdDetail(src, "/eb boost clear dim <dimension> [type]", "Clear dimension multipliers");
-
-        src.sendSuccess(() -> footer(), false);
-        return 1;
-    }
-
-    private static int showEventHelp(CommandSourceStack src) {
-        src.sendSuccess(() -> header("Event Commands"), false);
-
-        src.sendSuccess(() -> section("Event Spawns"), false);
-        sendCmdDetail(src, "/eb event spawn <id> <player>",
-                "Spawn an event entity for a player",
-                "Example: /eb event spawn christmas_boss Steve");
-
-        src.sendSuccess(() -> section("NPC Management"), false);
-        sendCmdDetail(src, "/eb event npc create <id>", "Create a new event NPC");
-        sendCmdDetail(src, "/eb event npc remove <id>", "Remove an event NPC");
-        sendCmdDetail(src, "/eb event npc list", "List all event NPCs");
-
-        src.sendSuccess(() -> footer(), false);
-        return 1;
-    }
-
-    private static int showRewardsHelp(CommandSourceStack src) {
-        src.sendSuccess(() -> header("Reward Commands"), false);
-
-        src.sendSuccess(() -> section("Eligibility"), false);
-        sendCmdDetail(src, "/eb rewards set <player> donator <tier>",
-                "Set donator tier for player",
-                "Tiers: none, copper, silver, gold",
-                "Example: /eb rewards set Steve donator gold");
-
-        sendCmdDetail(src, "/eb rewards set <player> gym <true/false>",
-                "Set gym leader status");
-
-        sendCmdDetail(src, "/eb rewards set <player> staff <true/false>",
-                "Set staff status");
-
-        src.sendSuccess(() -> section("Information"), false);
-        sendCmdDetail(src, "/eb rewards list <type>",
-                "List players with eligibility",
-                "Types: donator, donator_copper, donator_silver, donator_gold, gym, staff");
-
-        sendCmdDetail(src, "/eb rewards reload", "Reload reward configurations");
-
-        src.sendSuccess(() -> footer(), false);
-        return 1;
-    }
-
-    private static int showWeatherHelp(CommandSourceStack src) {
-        src.sendSuccess(() -> header("Weather Commands"), false);
-
-        src.sendSuccess(() -> section("System Control"), false);
-        sendCmdDetail(src, "/eb weather christmas enable",
-                "Enable the Christmas weather system",
-                "Required before using storm or auto commands");
-
-        sendCmdDetail(src, "/eb weather christmas disable",
-                "Disable the Christmas weather system completely",
-                "Saves performance when event is not active");
-
-        src.sendSuccess(() -> section("Storm Control"), false);
-        sendCmdDetail(src, "/eb weather christmas storm on",
-                "Start a blizzard immediately",
-                "Players outside will freeze and take damage");
-
-        sendCmdDetail(src, "/eb weather christmas storm off", "Stop the current blizzard");
-
-        src.sendSuccess(() -> section("Automatic Cycle"), false);
-        sendCmdDetail(src, "/eb weather christmas auto on",
-                "Enable automatic blizzard cycle",
-                "Blizzards occur based on config (default: every 60 min)");
-
-        sendCmdDetail(src, "/eb weather christmas auto off", "Disable automatic blizzard cycle");
-
-        src.sendSuccess(() -> section("Information"), false);
-        sendCmdDetail(src, "/eb weather christmas status", "Show current weather status and settings");
-
-        sendCmdDetail(src, "/eb weather christmas init", "Initialize base Christmas boosts manually");
+            src.sendSuccess(() -> section("Admin - Clear Boosts"), false);
+            sendCmdDetail(src, "/eb boost clear all", "Clear ALL active boosts");
+            sendCmdDetail(src, "/eb boost clear global [type]", "Clear global boosts");
+            sendCmdDetail(src, "/eb boost clear dim <dimension> [type]", "Clear dimension multipliers");
+        }
 
         src.sendSuccess(() -> footer(), false);
         return 1;
@@ -215,32 +155,28 @@ public final class HelpCommand {
     private static int showQuestHelp(CommandSourceStack src) {
         src.sendSuccess(() -> header("Quest Commands"), false);
 
-        src.sendSuccess(() -> section("Player Commands"), false);
+        src.sendSuccess(() -> section("Random Quests"), false);
+        sendCmdDetail(src, "/eb quest daily", "View daily quest", "Reward: 5-10 Bronze Coins (base 5 + streak up to +5)");
+        sendCmdDetail(src, "/eb quest weekly", "View weekly quest", "Reward: 1 Silver Coin");
+        sendCmdDetail(src, "/eb quest monthly", "View monthly quest", "Reward: 1 Gold Coin");
+        sendCmdDetail(src, "/eb quest turnin <daily|weekly|monthly>", "Turn in completed quest");
+
+        src.sendSuccess(() -> section("Story Quests"), false);
         sendCmdDetail(src, "/eb quest active", "Show your active quests");
-        sendCmdDetail(src, "/eb quest progress", "Show progress for all active quests");
-        sendCmdDetail(src, "/eb quest info <questId>", "Show details for a specific quest");
+        sendCmdDetail(src, "/eb quest progress", "Show progress on all quests");
+        sendCmdDetail(src, "/eb quest info <id>", "Show quest details");
 
         if (hasPermission(src, "evolutionboost.quest.admin", 2)) {
             src.sendSuccess(() -> section("Admin Commands"), false);
-            sendCmdDetail(src, "/eb quest list [questline]", "List all quests or quests in a line");
-
-            sendCmdDetail(src, "/eb quest <line> <id> activate <player>",
-                    "Activate a quest for a player",
-                    "Checks prerequisites before activating",
-                    "Example: /eb quest christmas mq1 activate Steve");
-
-            sendCmdDetail(src, "/eb quest <line> <id> set <player> <status>",
-                    "Directly set quest status",
-                    "Status: active, available, locked, completed");
-
-            sendCmdDetail(src, "/eb quest <line> <id> complete <player>",
-                    "Complete quest and give rewards",
-                    "Only works if all objectives are done");
-
-            sendCmdDetail(src, "/eb quest <line> <id> reset <player>", "Reset quest progress");
-
-            sendCmdDetail(src, "/eb quest <line> <id> progress <player> <obj> <amount>",
-                    "Manually add progress to an objective");
+            sendCmdDetail(src, "/eb quest list [questline]", "List all quests");
+            sendCmdDetail(src, "/eb quest admin status <player> <line> <quest> <status>",
+                    "Set quest status (locked/available/active/ready/completed)");
+            sendCmdDetail(src, "/eb quest admin progress <player> <line> <quest> <obj> <amount>",
+                    "Add progress to objective");
+            sendCmdDetail(src, "/eb quest admin reroll <type> [player]",
+                    "Reroll random quests (daily/weekly/monthly/all)");
+            sendCmdDetail(src, "/eb quest admin complete <player> <type>",
+                    "Force-complete random quest");
         }
 
         src.sendSuccess(() -> footer(), false);
@@ -251,40 +187,80 @@ public final class HelpCommand {
         src.sendSuccess(() -> header("Pokédex Commands"), false);
 
         src.sendSuccess(() -> section("Player Commands"), false);
-        sendCmdDetail(src, "/eb dex info",
-                "Show your Pokédex progress",
-                "Displays caught Pokémon count, percentage, and milestone status");
-
-        sendCmdDetail(src, "/eb dex claim <milestone>",
-                "Claim a milestone reward",
-                "You must have caught enough Pokémon to reach the milestone",
-                "Example: /eb dex claim bugcatcher");
-
+        sendCmdDetail(src, "/eb dex info", "Show your Pokédex progress and milestones");
+        sendCmdDetail(src, "/eb dex list", "List all available milestones");
+        sendCmdDetail(src, "/eb dex claim <milestone>", "Claim a milestone reward");
         sendCmdDetail(src, "/eb dex pokemon <milestone> <species> [shiny]",
-                "Claim your Pokémon reward with perfect IVs (Level 1)",
-                "Only base Pokémon allowed (no evolutions!)",
-                "Available after claiming item rewards for milestones at 25%, 50%, 75%, 100%",
-                "Example: /eb dex pokemon pokefan bulbasaur",
-                "Example: /eb dex pokemon acetrainer charmander true");
-
-        sendCmdDetail(src, "/eb dex list",
-                "List all available milestones",
-                "Shows percentage required and rewards for each milestone");
+                "Claim Pokémon reward with perfect IVs",
+                "Only base forms allowed (no evolutions)");
 
         if (hasPermission(src, "evolutionboost.dex.admin", 2)) {
             src.sendSuccess(() -> section("Admin Commands"), false);
-
-            sendCmdDetail(src, "/eb dex check <player>",
-                    "Check another player's Pokédex progress");
-
-            sendCmdDetail(src, "/eb dex reload",
-                    "Reload the dex_rewards.json config");
-
+            sendCmdDetail(src, "/eb dex check <player>", "Check another player's progress");
+            sendCmdDetail(src, "/eb dex reload", "Reload dex_rewards.json");
             sendCmdDetail(src, "/eb dex reset <player> <type>",
-                    "Reset a player's claimed rewards",
-                    "Types: all (all rewards), pokemon (only Pokémon rewards), or <milestone_id>",
-                    "Note: Does NOT reset the Pokédex itself - only makes rewards claimable again");
+                    "Reset claimed rewards (all/pokemon/<milestone_id>)");
         }
+
+        src.sendSuccess(() -> footer(), false);
+        return 1;
+    }
+
+    private static int showAdminHelp(CommandSourceStack src) {
+        if (!hasPermission(src, "evolutionboost.admin", 3)) {
+            src.sendFailure(Component.literal("✗ No permission").withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        src.sendSuccess(() -> header("Admin Commands"), false);
+
+        src.sendSuccess(() -> section("Teleportation"), false);
+        sendCmdDetail(src, "/eb admin tp <dimension>", "Teleport to any dimension");
+        sendCmdDetail(src, "/eb admin return", "Return to Overworld spawn");
+        sendCmdDetail(src, "/eb admin setspawn <target>", "Set event spawn point");
+        sendCmdDetail(src, "/eb admin tpspawn <type>", "TP players to spawn (online/offline/all)");
+
+        src.sendSuccess(() -> section("Safari Zone"), false);
+        sendCmdDetail(src, "/eb safari return", "Return early from Safari Zone");
+
+        src.sendSuccess(() -> footer(), false);
+        return 1;
+    }
+
+    private static int showRewardsHelp(CommandSourceStack src) {
+        if (!hasPermission(src, "evolutionboost.rewards", 2)) {
+            src.sendFailure(Component.literal("✗ No permission").withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        src.sendSuccess(() -> header("Reward Commands"), false);
+
+        src.sendSuccess(() -> section("Eligibility"), false);
+        sendCmdDetail(src, "/eb rewards set <player> donator <tier>", "Set donator tier (0-5)");
+        sendCmdDetail(src, "/eb rewards set <player> voter <true|false>", "Set voter status");
+        sendCmdDetail(src, "/eb rewards set <player> supporter <true|false>", "Set supporter status");
+
+        src.sendSuccess(() -> section("Query"), false);
+        sendCmdDetail(src, "/eb rewards list <type>", "List eligible players");
+        sendCmdDetail(src, "/eb rewards check <player>", "Check player's eligibility");
+        sendCmdDetail(src, "/eb rewards reload", "Reload reward configs");
+
+        src.sendSuccess(() -> footer(), false);
+        return 1;
+    }
+
+    private static int showWeatherHelp(CommandSourceStack src) {
+        if (!hasPermission(src, "evolutionboost.weather", 2)) {
+            src.sendFailure(Component.literal("✗ No permission").withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        src.sendSuccess(() -> header("Weather Commands"), false);
+
+        src.sendSuccess(() -> section("Christmas Weather"), false);
+        sendCmdDetail(src, "/eb weather christmas enable/disable", "Toggle weather system");
+        sendCmdDetail(src, "/eb weather christmas storm on/off", "Toggle blizzard");
+        sendCmdDetail(src, "/eb weather christmas auto on/off", "Toggle auto-cycle");
 
         src.sendSuccess(() -> footer(), false);
         return 1;
@@ -309,7 +285,7 @@ public final class HelpCommand {
 
     private static MutableComponent clickable(String text, String command, String tooltip) {
         return Component.literal(text)
-                .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)
+                .withStyle(ChatFormatting.YELLOW)
                 .withStyle(style -> style
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
@@ -324,7 +300,6 @@ public final class HelpCommand {
                 .append(Component.literal(" - ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal(desc).withStyle(ChatFormatting.GRAY));
 
-        // Make clickable to suggest command
         String baseCmd = cmd.split(" <")[0].split(" \\[")[0];
         line = line.withStyle(style -> style
                 .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, baseCmd))

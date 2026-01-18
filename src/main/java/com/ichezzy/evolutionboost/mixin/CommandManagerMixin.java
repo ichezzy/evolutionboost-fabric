@@ -32,7 +32,7 @@ public abstract class CommandManagerMixin {
 
         // Wir loggen hier unmittelbar nach dem Empfang beim Server.
         // Exaktes Execution-Resultat ist an dieser Stelle nicht verfügbar → result=1, success=true
-        CommandLogManager.logAfter(css, "/" + command, 1, true);
+        CommandLogManager.log(css, "/" + command, 1, true);
     }
 
     /**
