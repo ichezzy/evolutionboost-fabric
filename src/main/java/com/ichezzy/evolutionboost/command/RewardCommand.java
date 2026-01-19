@@ -149,6 +149,18 @@ public final class RewardCommand {
                                                     .append(Component.literal(": GOLD").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)), false);
                                             return 1;
                                         }))
+                                        .then(Commands.literal("platinum").executes(ctx -> {
+                                            String name = StringArgumentType.getString(ctx, "name");
+                                            RewardManager.setDonatorTier(name, DonatorTier.PLATINUM);
+
+                                            ServerPlayer online = ctx.getSource().getServer().getPlayerList().getPlayerByName(name);
+                                            Component targetName = online != null ? online.getName() : Component.literal(name);
+
+                                            ctx.getSource().sendSuccess(() -> Component.literal("[Rewards] Set DONATOR TIER for ")
+                                                    .append(targetName)
+                                                    .append(Component.literal(": PLATINUM").withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD)), false);
+                                            return 1;
+                                        }))
                                         .then(Commands.literal("none").executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "name");
                                             RewardManager.setDonatorTier(name, DonatorTier.NONE);

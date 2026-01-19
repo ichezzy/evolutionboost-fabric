@@ -18,282 +18,288 @@ import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
- * Verwaltet das Command-Logging-System.
+ * Command-Logging System.
  * 
  * Ordnerstruktur:
  *   config/evolutionboost/logs/commands/
  *   ├── (01) 2025-Jan/
- *   │   ├── (001) Sat-18-01-2025.txt
- *   │   ├── (002) Sun-19-01-2025.txt
- *   │   └── ...
- *   ├── (02) 2025-Feb/
- *   │   └── ...
- *   └── ...
+ *   │   ├── (001) Sun-19-01-2025.txt          <- Alle Commands
+ *   │   ├── (001) Sun-19-01-2025 Filtered.txt <- Nur gefilterte Commands
+ *   │   └── (002) Mon-20-01-2025.txt
+ *   └── (02) 2025-Feb/
  */
 public final class CommandLogManager {
 
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final Object LOCK = new Object();
-    private static BufferedWriter currentWriter;
+    
+    // Normale Log-Datei
+    private static BufferedWriter writer;
     private static LocalDate currentDate;
+    
+    // Gefilterte Log-Datei
+    private static BufferedWriter filteredWriter;
+    private static LocalDate filteredDate;
+    
     private static int monthCounter = 0;
 
     private CommandLogManager() {}
 
-    // ==================== Lifecycle ====================
-
-    /**
-     * Initialisiert das Logging-System beim Serverstart.
-     */
     public static void init() {
         CommandLogConfig cfg = CommandLogConfig.get();
         if (!cfg.enabled) {
-            EvolutionBoost.LOGGER.info("[cmdlog] Command logging is disabled");
+            EvolutionBoost.LOGGER.info("[cmdlog] Command-Logging deaktiviert");
             return;
         }
 
         try {
             Files.createDirectories(CommandLogConfig.getLogBaseDir());
-            initMonthCounter();
+            findHighestMonthCounter();
             openLogFile();
             cleanupOldMonths();
-            EvolutionBoost.LOGGER.info("[cmdlog] Command logging initialized");
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.error("[cmdlog] Failed to initialize: {}", e.getMessage());
+            EvolutionBoost.LOGGER.info("[cmdlog] Command-Logging initialisiert");
+        } catch (Exception e) {
+            EvolutionBoost.LOGGER.error("[cmdlog] Init fehlgeschlagen: {}", e.getMessage());
         }
     }
 
-    /**
-     * Schließt das Logging-System beim Serverstop.
-     */
     public static void shutdown() {
         synchronized (LOCK) {
             closeWriter();
+            closeFilteredWriter();
         }
     }
 
-    // ==================== Main Logging ====================
-
     /**
-     * Loggt einen ausgeführten Command.
-     * Wird vom Mixin aufgerufen.
+     * Loggt einen Command.
      */
-    public static void log(CommandSourceStack source, String rawCommand, int result, boolean success) {
+    public static void log(CommandSourceStack source, String command, int result) {
         CommandLogConfig cfg = CommandLogConfig.get();
-        
-        // Quelle bestimmen
+        if (!cfg.enabled) return;
+
+        String playerName;
         boolean isConsole = false;
         boolean isCommandBlock = false;
-        String playerName = "-";
-        String uuid = "-";
-        String dim = "unknown";
 
-        if (source != null) {
-            if (source.getEntity() instanceof ServerPlayer player) {
-                playerName = player.getGameProfile().getName();
-                uuid = player.getStringUUID();
-                dim = player.level().dimension().location().toString();
+        if (source == null) {
+            playerName = "UNKNOWN";
+        } else if (source.getEntity() instanceof ServerPlayer player) {
+            playerName = player.getGameProfile().getName();
+        } else {
+            String textName = source.getTextName();
+            if ("Server".equals(textName)) {
+                isConsole = true;
+                playerName = "CONSOLE";
             } else {
-                String textName = source.getTextName();
-                if ("Server".equals(textName)) {
-                    isConsole = true;
-                    playerName = "CONSOLE";
-                } else {
-                    isCommandBlock = true;
-                    playerName = "CommandBlock";
-                }
-                if (source.getLevel() != null) {
-                    dim = source.getLevel().dimension().location().toString();
-                }
+                isCommandBlock = true;
+                playerName = "CommandBlock";
             }
         }
 
-        // Command normalisieren (ohne führenden Slash)
-        String command = rawCommand != null ? rawCommand : "";
-        if (command.startsWith("/")) command = command.substring(1);
+        // Config-Filter prüfen
+        if (isConsole && !cfg.logConsole) return;
+        if (isCommandBlock && !cfg.logCommandBlocks) return;
         
-        // Filter prüfen (mit der KORRIGIERTEN Blacklist-Logik)
-        if (!cfg.shouldLog(command, isConsole, isCommandBlock, success)) {
-            return;
-        }
+        // Blacklist prüfen
+        if (!cfg.shouldLog(command)) return;
 
-        // Format erstellen
-        String resultStr = success ? "OK" : "FAILED";
-        
+        String resultStr = result >= 1 ? "OK" : (result == 0 ? "FAIL" : "ERR");
+
         String line = cfg.format
-                .replace("{time}", LocalTime.now().format(TIME_FORMAT))
-                .replace("{date}", LocalDate.now().format(DATE_FORMAT))
+                .replace("{time}", LocalTime.now().format(TIME_FMT))
                 .replace("{player}", playerName)
-                .replace("{uuid}", uuid)
-                .replace("{dim}", dim)
                 .replace("{command}", command)
                 .replace("{result}", resultStr);
 
-        // Schreiben
+        // Normal loggen
         writeLine(line);
-    }
-
-    // ==================== File Management ====================
-
-    /**
-     * Zählt existierende Monatsordner und setzt den Counter entsprechend.
-     */
-    private static void initMonthCounter() throws IOException {
-        Path baseDir = CommandLogConfig.getLogBaseDir();
-        Files.createDirectories(baseDir);
         
-        // Finde den höchsten existierenden Counter
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(baseDir)) {
-            for (Path entry : stream) {
-                if (Files.isDirectory(entry)) {
-                    String name = entry.getFileName().toString();
-                    // Format: "(01) 2025-Jan"
-                    if (name.startsWith("(") && name.contains(")")) {
-                        try {
-                            int num = Integer.parseInt(name.substring(1, name.indexOf(")")));
-                            if (num > monthCounter) {
-                                monthCounter = num;
-                            }
-                        } catch (NumberFormatException ignored) {}
-                    }
-                }
-            }
+        // Zusätzlich in Filter-Datei wenn Command im Filter ist
+        if (cfg.isFiltered(command)) {
+            writeFilteredLine(line);
         }
     }
+
+    // ==================== Normale Log-Datei ====================
 
     private static void writeLine(String line) {
         synchronized (LOCK) {
             try {
-                // Prüfen ob neuer Tag → neue Datei
                 LocalDate today = LocalDate.now();
-                if (!today.equals(currentDate)) {
+                if (writer == null || !today.equals(currentDate)) {
                     openLogFile();
                 }
-
-                if (currentWriter != null) {
-                    currentWriter.write(line);
-                    currentWriter.newLine();
-                    currentWriter.flush();
+                if (writer != null) {
+                    writer.write(line);
+                    writer.newLine();
+                    writer.flush();
                 }
             } catch (IOException e) {
-                EvolutionBoost.LOGGER.warn("[cmdlog] Failed to write: {}", e.getMessage());
+                EvolutionBoost.LOGGER.warn("[cmdlog] Schreibfehler: {}", e.getMessage());
             }
         }
     }
 
-    /**
-     * Öffnet eine neue Logdatei.
-     * Struktur: (01) 2025-Jan / (001) Sat-18-01-2025.txt
-     */
     private static void openLogFile() {
         closeWriter();
-        
         LocalDate today = LocalDate.now();
         currentDate = today;
         
-        // Monatsordner erstellen/finden
         Path monthDir = getOrCreateMonthDir(today);
-        
-        // Datei im Monatsordner erstellen
-        Path logFile = createDayFile(monthDir, today);
+        Path logFile = getDayFile(monthDir, today, false);
 
         try {
-            currentWriter = Files.newBufferedWriter(logFile, StandardCharsets.UTF_8,
+            writer = Files.newBufferedWriter(logFile, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-            EvolutionBoost.LOGGER.debug("[cmdlog] Opened log file: {}", logFile);
         } catch (IOException e) {
-            EvolutionBoost.LOGGER.error("[cmdlog] Failed to open log file: {}", e.getMessage());
+            EvolutionBoost.LOGGER.error("[cmdlog] Datei öffnen fehlgeschlagen: {}", e.getMessage());
         }
     }
 
-    /**
-     * Erstellt oder findet den Monatsordner für das gegebene Datum.
-     * Format: "(01) 2025-Jan"
-     */
+    private static void closeWriter() {
+        if (writer != null) {
+            try { writer.close(); } catch (IOException ignored) {}
+            writer = null;
+        }
+    }
+
+    // ==================== Gefilterte Log-Datei ====================
+
+    private static void writeFilteredLine(String line) {
+        synchronized (LOCK) {
+            try {
+                LocalDate today = LocalDate.now();
+                if (filteredWriter == null || !today.equals(filteredDate)) {
+                    openFilteredLogFile();
+                }
+                if (filteredWriter != null) {
+                    filteredWriter.write(line);
+                    filteredWriter.newLine();
+                    filteredWriter.flush();
+                }
+            } catch (IOException e) {
+                EvolutionBoost.LOGGER.warn("[cmdlog] Filter-Schreibfehler: {}", e.getMessage());
+            }
+        }
+    }
+
+    private static void openFilteredLogFile() {
+        closeFilteredWriter();
+        LocalDate today = LocalDate.now();
+        filteredDate = today;
+        
+        Path monthDir = getOrCreateMonthDir(today);
+        Path logFile = getDayFile(monthDir, today, true);
+
+        try {
+            filteredWriter = Files.newBufferedWriter(logFile, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            EvolutionBoost.LOGGER.error("[cmdlog] Filter-Datei öffnen fehlgeschlagen: {}", e.getMessage());
+        }
+    }
+
+    private static void closeFilteredWriter() {
+        if (filteredWriter != null) {
+            try { filteredWriter.close(); } catch (IOException ignored) {}
+            filteredWriter = null;
+        }
+    }
+
+    // ==================== Datei-Management ====================
+
+    private static void findHighestMonthCounter() {
+        Path baseDir = CommandLogConfig.getLogBaseDir();
+        try {
+            if (!Files.exists(baseDir)) return;
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(baseDir)) {
+                for (Path entry : stream) {
+                    if (Files.isDirectory(entry)) {
+                        String name = entry.getFileName().toString();
+                        if (name.startsWith("(") && name.contains(")")) {
+                            try {
+                                int num = Integer.parseInt(name.substring(1, name.indexOf(")")));
+                                if (num > monthCounter) monthCounter = num;
+                            } catch (NumberFormatException ignored) {}
+                        }
+                    }
+                }
+            }
+        } catch (IOException ignored) {}
+    }
+
     private static Path getOrCreateMonthDir(LocalDate date) {
         Path baseDir = CommandLogConfig.getLogBaseDir();
         String yearMonth = date.getYear() + "-" + date.getMonth().getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
         
-        // Prüfe ob ein Ordner für diesen Monat bereits existiert
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(baseDir)) {
             for (Path entry : stream) {
-                if (Files.isDirectory(entry)) {
-                    String name = entry.getFileName().toString();
-                    if (name.endsWith(yearMonth)) {
-                        return entry; // Ordner existiert bereits
-                    }
+                if (Files.isDirectory(entry) && entry.getFileName().toString().endsWith(yearMonth)) {
+                    return entry;
                 }
             }
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.warn("[cmdlog] Error checking month dirs: {}", e.getMessage());
-        }
+        } catch (IOException ignored) {}
         
-        // Neuen Monatsordner erstellen
         monthCounter++;
         String dirName = String.format("(%02d) %s", monthCounter, yearMonth);
         Path monthDir = baseDir.resolve(dirName);
         
         try {
             Files.createDirectories(monthDir);
-            EvolutionBoost.LOGGER.info("[cmdlog] Created new month folder: {}", dirName);
         } catch (IOException e) {
-            EvolutionBoost.LOGGER.error("[cmdlog] Failed to create month dir: {}", e.getMessage());
+            EvolutionBoost.LOGGER.error("[cmdlog] Ordner erstellen fehlgeschlagen: {}", e.getMessage());
         }
         
         return monthDir;
     }
 
     /**
-     * Erstellt die Tagesdatei im Monatsordner.
-     * Format: "(001) Sat-18-01-2025.txt"
+     * Findet oder erstellt die Tagesdatei.
+     * @param filtered true für "Filtered" Suffix
      */
-    private static Path createDayFile(Path monthDir, LocalDate date) {
-        // Wochentag abkürzen
+    private static Path getDayFile(Path monthDir, LocalDate date, boolean filtered) {
         String dayOfWeek = date.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
-        // Datum formatieren: DD-MM-YYYY
         String dateStr = String.format("%02d-%02d-%d", date.getDayOfMonth(), date.getMonthValue(), date.getYear());
         String baseName = dayOfWeek + "-" + dateStr;
+        String suffix = filtered ? " Filtered" : "";
         
-        // Prüfe ob eine Datei für heute bereits existiert
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(monthDir, "*" + baseName + ".txt")) {
-            for (Path entry : stream) {
-                // Datei für heute existiert - anhängen
-                return entry;
-            }
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.warn("[cmdlog] Error checking day files: {}", e.getMessage());
+        // Existierende Datei für heute suchen
+        String searchPattern = "*" + baseName + suffix + ".txt";
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(monthDir, searchPattern)) {
+            for (Path entry : stream) return entry;
+        } catch (IOException ignored) {}
+        
+        // Für gefilterte Dateien: Gleiche Nummer wie normale Datei verwenden
+        String fileNumber;
+        if (filtered) {
+            // Suche die normale Datei für heute und extrahiere deren Nummer
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(monthDir, "*" + baseName + ".txt")) {
+                for (Path entry : stream) {
+                    String name = entry.getFileName().toString();
+                    if (!name.contains("Filtered") && name.startsWith("(")) {
+                        fileNumber = name.substring(0, name.indexOf(")") + 1);
+                        return monthDir.resolve(fileNumber + " " + baseName + " Filtered.txt");
+                    }
+                }
+            } catch (IOException ignored) {}
         }
         
-        // Zähle existierende Dateien für Nummerierung
+        // Neue Datei mit Nummer erstellen (nur für normale Dateien zählen)
         int fileCount = 0;
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(monthDir, "*.txt")) {
             for (Path entry : stream) {
-                fileCount++;
+                // Nur normale Dateien zählen, nicht Filtered
+                if (!entry.getFileName().toString().contains("Filtered")) {
+                    fileCount++;
+                }
             }
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.warn("[cmdlog] Error counting files: {}", e.getMessage());
-        }
+        } catch (IOException ignored) {}
         
-        // Neue Datei erstellen mit Nummer
         fileCount++;
-        String fileName = String.format("(%03d) %s.txt", fileCount, baseName);
+        String fileName = String.format("(%03d) %s%s.txt", fileCount, baseName, suffix);
         return monthDir.resolve(fileName);
     }
 
-    private static void closeWriter() {
-        if (currentWriter != null) {
-            try {
-                currentWriter.close();
-            } catch (IOException ignored) {}
-            currentWriter = null;
-        }
-    }
-
-    /**
-     * Löscht alte Monatsordner wenn maxMonths überschritten.
-     */
     private static void cleanupOldMonths() {
         CommandLogConfig cfg = CommandLogConfig.get();
         if (cfg.maxMonths <= 0) return;
@@ -305,49 +311,23 @@ public final class CommandLogManager {
             var monthDirs = dirs
                     .filter(Files::isDirectory)
                     .filter(p -> p.getFileName().toString().startsWith("("))
-                    .sorted(Comparator.comparing(p -> {
-                        // Sortiere nach Nummer im Ordnernamen
+                    .sorted(Comparator.comparingInt(p -> {
                         String name = p.getFileName().toString();
-                        try {
-                            return Integer.parseInt(name.substring(1, name.indexOf(")")));
-                        } catch (Exception e) {
-                            return 0;
-                        }
+                        try { return Integer.parseInt(name.substring(1, name.indexOf(")"))); }
+                        catch (Exception e) { return Integer.MAX_VALUE; }
                     }))
                     .toList();
 
             int toDelete = monthDirs.size() - cfg.maxMonths;
-            if (toDelete > 0) {
-                for (int i = 0; i < toDelete; i++) {
-                    Path dirToDelete = monthDirs.get(i);
-                    try {
-                        // Lösche alle Dateien im Ordner
-                        try (Stream<Path> files = Files.list(dirToDelete)) {
-                            files.forEach(f -> {
-                                try {
-                                    Files.delete(f);
-                                } catch (IOException ignored) {}
-                            });
-                        }
-                        // Lösche den Ordner selbst
-                        Files.delete(dirToDelete);
-                        EvolutionBoost.LOGGER.info("[cmdlog] Deleted old month folder: {}", dirToDelete.getFileName());
-                    } catch (IOException e) {
-                        EvolutionBoost.LOGGER.warn("[cmdlog] Failed to delete: {}", e.getMessage());
+            for (int i = 0; i < toDelete && i < monthDirs.size(); i++) {
+                Path dirToDelete = monthDirs.get(i);
+                try {
+                    try (Stream<Path> files = Files.list(dirToDelete)) {
+                        files.forEach(f -> { try { Files.delete(f); } catch (IOException ignored) {} });
                     }
-                }
+                    Files.delete(dirToDelete);
+                } catch (IOException ignored) {}
             }
-        } catch (IOException e) {
-            EvolutionBoost.LOGGER.warn("[cmdlog] Failed to cleanup: {}", e.getMessage());
-        }
-    }
-
-    // ==================== Mixin Helper ====================
-
-    /**
-     * Helper für Mixin - konvertiert Object zu CommandSourceStack.
-     */
-    public static CommandSourceStack toStack(Object source) {
-        return source instanceof CommandSourceStack css ? css : null;
+        } catch (IOException ignored) {}
     }
 }

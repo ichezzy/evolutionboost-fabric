@@ -56,9 +56,10 @@ public final class RewardManager {
     private static final Map<UUID, String> LAST_NAMES = new ConcurrentHashMap<>();
 
     // Donator-Tiers (Case-insensitive Namen)
-    private static final Set<String> ALLOWED_DONATOR_COPPER = Collections.synchronizedSet(new HashSet<>());
-    private static final Set<String> ALLOWED_DONATOR_SILVER = Collections.synchronizedSet(new HashSet<>());
-    private static final Set<String> ALLOWED_DONATOR_GOLD   = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_DONATOR_COPPER   = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_DONATOR_SILVER   = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_DONATOR_GOLD     = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<String> ALLOWED_DONATOR_PLATINUM = Collections.synchronizedSet(new HashSet<>());
 
     private static final Set<String> ALLOWED_GYM   = Collections.synchronizedSet(new HashSet<>());
     private static final Set<String> ALLOWED_STAFF = Collections.synchronizedSet(new HashSet<>());
@@ -284,10 +285,11 @@ public final class RewardManager {
         if (type == RewardType.MONTHLY_DONATOR) {
             DonatorTier tier = getDonatorTier(p);
             key = switch (tier) {
-                case COPPER -> "MONTHLY_DONATOR_COPPER";
-                case SILVER -> "MONTHLY_DONATOR_SILVER";
-                case GOLD   -> "MONTHLY_DONATOR_GOLD";
-                default     -> "MONTHLY_DONATOR"; // Fallback für alte Configs
+                case COPPER   -> "MONTHLY_DONATOR_COPPER";
+                case SILVER   -> "MONTHLY_DONATOR_SILVER";
+                case GOLD     -> "MONTHLY_DONATOR_GOLD";
+                case PLATINUM -> "MONTHLY_DONATOR_PLATINUM";
+                default       -> "MONTHLY_DONATOR_COPPER"; // Fallback
             };
         } else {
             key = type.name(); // z.B. DAILY, WEEKLY, MONTHLY_GYM, MONTHLY_STAFF
@@ -516,6 +518,7 @@ public final class RewardManager {
         ALLOWED_DONATOR_COPPER.clear();
         ALLOWED_DONATOR_SILVER.clear();
         ALLOWED_DONATOR_GOLD.clear();
+        ALLOWED_DONATOR_PLATINUM.clear();
         ALLOWED_GYM.clear();
         ALLOWED_STAFF.clear();
 
@@ -539,9 +542,14 @@ public final class RewardManager {
                 String k = normalizeName(n);
                 if (!k.isEmpty()) ALLOWED_DONATOR_GOLD.add(k);
             }
+            for (String n : props.getProperty("donator_platinum", "").split(",")) {
+                String k = normalizeName(n);
+                if (!k.isEmpty()) ALLOWED_DONATOR_PLATINUM.add(k);
+            }
 
             // Backwards-Compat: altes "donator" → COPPER, wenn keine Tiers gesetzt sind
-            if (ALLOWED_DONATOR_COPPER.isEmpty() && ALLOWED_DONATOR_SILVER.isEmpty() && ALLOWED_DONATOR_GOLD.isEmpty()) {
+            if (ALLOWED_DONATOR_COPPER.isEmpty() && ALLOWED_DONATOR_SILVER.isEmpty() 
+                    && ALLOWED_DONATOR_GOLD.isEmpty() && ALLOWED_DONATOR_PLATINUM.isEmpty()) {
                 for (String n : props.getProperty("donator", "").split(",")) {
                     String k = normalizeName(n);
                     if (!k.isEmpty()) ALLOWED_DONATOR_COPPER.add(k);
@@ -566,9 +574,10 @@ public final class RewardManager {
             Files.createDirectories(rewardsConfigDir());
             Properties props = new Properties();
 
-            props.setProperty("donator_copper", String.join(",", ALLOWED_DONATOR_COPPER));
-            props.setProperty("donator_silver", String.join(",", ALLOWED_DONATOR_SILVER));
-            props.setProperty("donator_gold",   String.join(",", ALLOWED_DONATOR_GOLD));
+            props.setProperty("donator_copper",   String.join(",", ALLOWED_DONATOR_COPPER));
+            props.setProperty("donator_silver",   String.join(",", ALLOWED_DONATOR_SILVER));
+            props.setProperty("donator_gold",     String.join(",", ALLOWED_DONATOR_GOLD));
+            props.setProperty("donator_platinum", String.join(",", ALLOWED_DONATOR_PLATINUM));
             props.setProperty("gym",   String.join(",", ALLOWED_GYM));
             props.setProperty("staff", String.join(",", ALLOWED_STAFF));
 
@@ -579,6 +588,7 @@ public final class RewardManager {
                                 "donator_copper=a,b,c\n" +
                                 "donator_silver=x,y\n" +
                                 "donator_gold=z\n" +
+                                "donator_platinum=p1,p2\n" +
                                 "gym=g1,g2\n" +
                                 "staff=s1,s2");
             }
@@ -751,11 +761,16 @@ public final class RewardManager {
         NONE,
         COPPER,
         SILVER,
-        GOLD
+        GOLD,
+        PLATINUM
     }
 
     public static DonatorTier getDonatorTier(ServerPlayer p) {
         String key = normalizeName(p.getGameProfile().getName());
+        // Höchste Stufe zuerst prüfen
+        synchronized (ALLOWED_DONATOR_PLATINUM) {
+            if (ALLOWED_DONATOR_PLATINUM.contains(key)) return DonatorTier.PLATINUM;
+        }
         synchronized (ALLOWED_DONATOR_GOLD) {
             if (ALLOWED_DONATOR_GOLD.contains(key)) return DonatorTier.GOLD;
         }
@@ -775,6 +790,7 @@ public final class RewardManager {
     public static void setDonatorTier(String playerName, DonatorTier tier) {
         String key = normalizeName(playerName);
 
+        // Aus allen Stufen entfernen
         synchronized (ALLOWED_DONATOR_COPPER) {
             ALLOWED_DONATOR_COPPER.remove(key);
         }
@@ -784,12 +800,17 @@ public final class RewardManager {
         synchronized (ALLOWED_DONATOR_GOLD) {
             ALLOWED_DONATOR_GOLD.remove(key);
         }
+        synchronized (ALLOWED_DONATOR_PLATINUM) {
+            ALLOWED_DONATOR_PLATINUM.remove(key);
+        }
 
+        // Neue Stufe setzen
         switch (tier) {
-            case COPPER -> ALLOWED_DONATOR_COPPER.add(key);
-            case SILVER -> ALLOWED_DONATOR_SILVER.add(key);
-            case GOLD   -> ALLOWED_DONATOR_GOLD.add(key);
-            case NONE   -> { /* nichts */ }
+            case COPPER   -> ALLOWED_DONATOR_COPPER.add(key);
+            case SILVER   -> ALLOWED_DONATOR_SILVER.add(key);
+            case GOLD     -> ALLOWED_DONATOR_GOLD.add(key);
+            case PLATINUM -> ALLOWED_DONATOR_PLATINUM.add(key);
+            case NONE     -> { /* nichts */ }
         }
 
         saveEligibility();
