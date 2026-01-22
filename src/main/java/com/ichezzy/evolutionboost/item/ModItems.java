@@ -457,6 +457,12 @@ public final class ModItems {
             new EVResetItem(new Item.Properties().stacksTo(16).rarity(Rarity.EPIC))
     );
 
+    // Universal Mint
+    public static final Item UNIVERSAL_MINT = register(
+            "universal_mint",
+            new EVResetItem(new Item.Properties().stacksTo(16).rarity(Rarity.EPIC))
+    );
+
     // ---- Bottle Caps ----
     public static final Item BOTTLE_CAP_SILVER = register(
             "bottle_cap_silver",

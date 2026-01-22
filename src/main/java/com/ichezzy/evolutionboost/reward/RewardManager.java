@@ -239,8 +239,24 @@ public final class RewardManager {
         // Eligibility nur für Monthly (Donator / Gym / Staff)
         if ((type == RewardType.MONTHLY_DONATOR || type == RewardType.MONTHLY_GYM || type == RewardType.MONTHLY_STAFF)
                 && !isEligibleMonthly(p, type)) {
-            p.sendSystemMessage(Component.literal("[Rewards] You are not eligible for this monthly reward.")
-                    .withStyle(ChatFormatting.RED));
+            
+            // Detailliertere Meldung für Gym-Rewards
+            if (type == RewardType.MONTHLY_GYM) {
+                var gymMgr = com.ichezzy.evolutionboost.gym.GymManager.get();
+                if (!gymMgr.isAnyLeader(p)) {
+                    p.sendSystemMessage(Component.literal("[Rewards] You must be a Gym Leader to claim this reward.")
+                            .withStyle(ChatFormatting.RED));
+                } else {
+                    int missing = gymMgr.getMissingBattlesForReward(p);
+                    p.sendSystemMessage(Component.literal("[Rewards] You need ")
+                            .append(Component.literal(missing + " more battle(s)").withStyle(ChatFormatting.YELLOW))
+                            .append(Component.literal(" this month to claim Gym rewards."))
+                            .withStyle(ChatFormatting.RED));
+                }
+            } else {
+                p.sendSystemMessage(Component.literal("[Rewards] You are not eligible for this monthly reward.")
+                        .withStyle(ChatFormatting.RED));
+            }
             return false;
         }
 
@@ -378,7 +394,10 @@ public final class RewardManager {
     private static boolean isEligibleMonthly(ServerPlayer p, RewardType t) {
         String key = normalizeName(p.getGameProfile().getName());
         if (t == RewardType.MONTHLY_DONATOR) return getDonatorTier(p) != DonatorTier.NONE;
-        if (t == RewardType.MONTHLY_GYM)     return ALLOWED_GYM.contains(key);
+        if (t == RewardType.MONTHLY_GYM) {
+            // Dynamische Prüfung: Ist Gym Leader UND hat genug Kämpfe diesen Monat?
+            return com.ichezzy.evolutionboost.gym.GymManager.get().isEligibleForGymMonthlyReward(p);
+        }
         if (t == RewardType.MONTHLY_STAFF)   return ALLOWED_STAFF.contains(key);
         return true;
     }

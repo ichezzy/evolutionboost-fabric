@@ -328,7 +328,7 @@ public final class DexRewardsConfig {
                 "Exploring every corner",
                 "cobblemon:level_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_def", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
                         new RewardItem("cobblemon:exp_share", 1),
                         new RewardItem("cobblemon:pp_up", 2),
                         new RewardItem("cobblemon:revive", 5)
@@ -341,7 +341,7 @@ public final class DexRewardsConfig {
                 "Patient and persistent",
                 "cobblemon:lure_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_spd", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
                         new RewardItem("cobblemon:rare_candy", 10),
                         new RewardItem("cobblemon:pp_up", 2),
                         new RewardItem("cobblemon:hyper_potion", 5)
@@ -354,7 +354,8 @@ public final class DexRewardsConfig {
                 "A true fan of Pokémon",
                 "cobblemon:friend_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_hp", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:super_medicine", 1),
                         new RewardItem("cobblemon:master_ball", 1),
                         new RewardItem("cobblemon:ability_capsule", 1)
                 ),
@@ -367,7 +368,7 @@ public final class DexRewardsConfig {
                 "Knowledge is power",
                 "cobblemon:heal_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_atk", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
                         new RewardItem("cobblemon:exp_share", 1),
                         new RewardItem("cobblemon:pp_max", 2),
                         new RewardItem("cobblemon:revive", 5)
@@ -380,7 +381,7 @@ public final class DexRewardsConfig {
                 "Strength through discipline",
                 "cobblemon:heavy_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_spa", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
                         new RewardItem("cobblemon:rare_candy", 10),
                         new RewardItem("cobblemon:pp_max", 2),
                         new RewardItem("cobblemon:hyper_potion", 5)
@@ -393,8 +394,8 @@ public final class DexRewardsConfig {
                 "Halfway to mastery!",
                 "cobblemon:moon_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_spe", 1),
-                        new RewardItem("wanteditems:gold_bottle_cap", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:bottle_cap_gold", 1),
                         new RewardItem("cobblemon:master_ball", 1),
                         new RewardItem("cobblemon:ability_patch", 1)
                 ),
@@ -407,11 +408,8 @@ public final class DexRewardsConfig {
                 "Battle-hardened trainer",
                 "cobblemon:timer_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_def", 1),
-                        new RewardItem("cobblemon:bold_mint", 1),
-                        new RewardItem("cobblemon:impish_mint", 1),
-                        new RewardItem("cobblemon:lax_mint", 1),
-                        new RewardItem("cobblemon:relaxed_mint", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:universal_mint", 1),
                         new RewardItem("cobblemon:rare_candy", 10),
                         new RewardItem("cobblemon:full_restore", 5)
                 )
@@ -423,11 +421,8 @@ public final class DexRewardsConfig {
                 "Protector of nature",
                 "cobblemon:safari_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_spd", 1),
-                        new RewardItem("cobblemon:calm_mint", 1),
-                        new RewardItem("cobblemon:gentle_mint", 1),
-                        new RewardItem("cobblemon:careful_mint", 1),
-                        new RewardItem("cobblemon:sassy_mint", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:universal_mint", 1),
                         new RewardItem("cobblemon:rare_candy", 10),
                         new RewardItem("cobblemon:max_revive", 5)
                 )
@@ -439,16 +434,12 @@ public final class DexRewardsConfig {
                 "A true Pokémon Master",
                 "cobblemon:dusk_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_hp", 1),
-                        new RewardItem("cobblemon:hardy_mint", 1),
-                        new RewardItem("cobblemon:docile_mint", 1),
-                        new RewardItem("cobblemon:serious_mint", 1),
-                        new RewardItem("cobblemon:bashful_mint", 1),
-                        new RewardItem("cobblemon:quirky_mint", 1),
-                        new RewardItem("wanteditems:gold_bottle_cap", 1),
-                        new RewardItem("cobblemon:master_ball", 1),
-                        new RewardItem("cobblemon:ability_capsule", 1),
-                        new RewardItem("wanteditems:shiny_swapper", 1)
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:bottle_cap_gold", 1),
+                        new RewardItem("evolutionboost:universal_mint", 1),
+                        new RewardItem("evolutionboost:super_medicine", 1),
+                        new RewardItem("evolutionboost:ability_voucher", 1),
+                        new RewardItem("cobblemon:master_ball", 1)
                 ),
                 new PokemonReward(true, true, true, false, "Choose ANY Pokémon with perfect IVs - including Legendaries!")
         ));
@@ -459,11 +450,8 @@ public final class DexRewardsConfig {
                 "Gotta catch 'em all!",
                 "cobblemon:beast_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_atk", 1),
-                        new RewardItem("cobblemon:lonely_mint", 1),
-                        new RewardItem("cobblemon:adamant_mint", 1),
-                        new RewardItem("cobblemon:naughty_mint", 1),
-                        new RewardItem("cobblemon:brave_mint", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:universal_mint", 1),
                         new RewardItem("cobblemon:rare_candy", 10),
                         new RewardItem("cobblemon:full_restore", 5)
                 )
@@ -475,11 +463,8 @@ public final class DexRewardsConfig {
                 "The very best!",
                 "cobblemon:luxury_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_spa", 1),
-                        new RewardItem("cobblemon:modest_mint", 1),
-                        new RewardItem("cobblemon:mild_mint", 1),
-                        new RewardItem("cobblemon:rash_mint", 1),
-                        new RewardItem("cobblemon:quiet_mint", 1),
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:universal_mint", 1),
                         new RewardItem("cobblemon:rare_candy", 10),
                         new RewardItem("cobblemon:max_revive", 5)
                 )
@@ -491,15 +476,14 @@ public final class DexRewardsConfig {
                 "You've caught them all!",
                 "cobblemon:master_ball",
                 List.of(
-                        new RewardItem("wanteditems:bottle_cap_spe", 1),
-                        new RewardItem("cobblemon:timid_mint", 1),
-                        new RewardItem("cobblemon:hasty_mint", 1),
-                        new RewardItem("cobblemon:jolly_mint", 1),
-                        new RewardItem("cobblemon:naive_mint", 1),
-                        new RewardItem("wanteditems:gold_bottle_cap", 1),
-                        new RewardItem("cobblemon:master_ball", 1),
-                        new RewardItem("cobblemon:ability_patch", 1),
-                        new RewardItem("wanteditems:shiny_swapper", 1)
+                        new RewardItem("evolutionboost:bottle_cap_silver", 1),
+                        new RewardItem("evolutionboost:universal_mint", 1),
+                        new RewardItem("evolutionboost:bottle_cap_gold", 1),
+                        new RewardItem("evolutionboost:ability_voucher", 1),
+                        new RewardItem("evolutionboost:shiny_swapper", 1),
+                        new RewardItem("evolutionboost:shiny_charm", 1),
+                        new RewardItem("evolutionboost:xp_charm", 1),
+                        new RewardItem("cobblemon:master_ball", 1)
                 ),
                 new PokemonReward(true, true, true, true, "Choose ANY Pokémon with perfect IVs - can be SHINY!")
         ));

@@ -15,6 +15,8 @@ import com.ichezzy.evolutionboost.compat.cobblemon.HooksRegistrar;
 import com.ichezzy.evolutionboost.configs.NotificationConfig;
 import com.ichezzy.evolutionboost.dex.DexCatchHook;
 import com.ichezzy.evolutionboost.dex.DexDataManager;
+import com.ichezzy.evolutionboost.gym.GymCommand;
+import com.ichezzy.evolutionboost.gym.GymManager;
 import com.ichezzy.evolutionboost.hud.BoostHudSync;
 import com.ichezzy.evolutionboost.hud.DimBoostHudPayload;
 import com.ichezzy.evolutionboost.hud.HudTogglePayload;
@@ -99,6 +101,7 @@ public class EvolutionBoost implements ModInitializer {
                     DexCommand.register(d);
                     NotificationCommand.register(d);
                     HudCommand.register(d);
+                    GymCommand.register(d);
                 }
         );
 
@@ -120,6 +123,7 @@ public class EvolutionBoost implements ModInitializer {
             RandomQuestManager.get().init(server); // Random Quest System initialisieren
             RandomQuestScheduler.register(); // Reset-Benachrichtigungen registrieren
             DexDataManager.init(server); // Pokédex-Daten initialisieren
+            GymManager.get().init(server); // Gym-System initialisieren
 
             // Trinkets-Kompatibilität initialisieren (falls Trinkets geladen)
             if (FabricLoader.getInstance().isModLoaded("trinkets")) {
@@ -140,7 +144,9 @@ public class EvolutionBoost implements ModInitializer {
                 RandomQuestHook.register();
                 // Pokédex-Hook registrieren
                 DexCatchHook.register();
-                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest, Random Quest & Dex hooks)");
+                // Gym Battle Hook registrieren
+                com.ichezzy.evolutionboost.gym.GymBattleHook.register();
+                LOGGER.info("Cobblemon detected – hooks registered (incl. Quest, Random Quest, Dex & Gym hooks)");
             } else {
                 LOGGER.warn("Cobblemon not detected – hooks skipped");
             }
@@ -152,6 +158,7 @@ public class EvolutionBoost implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             NotificationConfig.shutdown();
             CommandLogManager.shutdown();
+            GymManager.get().shutdown();
             safeUnregister(server);
         });
 

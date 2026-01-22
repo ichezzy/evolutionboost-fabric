@@ -63,6 +63,9 @@ public final class ModItemGroup {
                             output.accept(ModItems.SUPER_CARBOS);
                             output.accept(ModItems.RESET_MEDICINE);
 
+                            // ===== MINTS =====
+                            output.accept(ModItems.UNIVERSAL_MINT);
+
                             // ===== BOTTLE CAPS =====
                             output.accept(ModItems.BOTTLE_CAP_COPPER);
                             output.accept(ModItems.BOTTLE_CAP_SILVER);

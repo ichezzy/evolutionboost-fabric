@@ -143,6 +143,8 @@
   "item.evolutionboost.super_medicine": "Super Medicine",
   "item.evolutionboost.reset_medicine": "Reset Medicine",
 
+  "item.evolutionboost.universal_mint": "Universal Mint",
+
   "item.evolutionboost.bottle_cap_silver": "Silver Bottle Cap",
   "item.evolutionboost.bottle_cap_gold": "Gold Bottle Cap",
   "item.evolutionboost.bottle_cap_copper": "Copper Bottle Cap",
@@ -168,5 +170,6 @@
   "tooltip.evolutionboost.bottle_cap_spdef": "Sets Sp. Def IV to 31",
   "tooltip.evolutionboost.bottle_cap_speed": "Sets Speed IV to 31",
 
-  "tooltip.evolutionboost.super_medicine": "Can be exchanged for any Super EV medicine."
+  "tooltip.evolutionboost.super_medicine": "Can be exchanged for any Super EV medicine.",
+  "tooltip.evolutionboost.universal_mint": "Can be exchanged for any mint."
 }

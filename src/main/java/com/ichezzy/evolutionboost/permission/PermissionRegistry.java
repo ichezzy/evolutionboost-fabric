@@ -43,6 +43,29 @@ public final class PermissionRegistry {
         
         // Dex
         PERMISSIONS.put("evolutionboost.dex.admin", "Access to dex admin commands (check, reload, reset)");
+        
+        // Gym System
+        PERMISSIONS.put("evolutionboost.gym.challenge", "Can challenge gym leaders");
+        PERMISSIONS.put("evolutionboost.gym.admin", "Access to gym admin commands (setleader, removeleader, rewards)");
+        PERMISSIONS.put("evolutionboost.gym.leader", "Is a gym leader (any type)");
+        PERMISSIONS.put("evolutionboost.gym.leader.bug", "Is the Bug Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.dark", "Is the Dark Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.dragon", "Is the Dragon Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.electric", "Is the Electric Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.fairy", "Is the Fairy Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.fighting", "Is the Fighting Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.fire", "Is the Fire Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.flying", "Is the Flying Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.ghost", "Is the Ghost Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.grass", "Is the Grass Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.ground", "Is the Ground Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.ice", "Is the Ice Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.normal", "Is the Normal Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.poison", "Is the Poison Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.psychic", "Is the Psychic Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.rock", "Is the Rock Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.steel", "Is the Steel Gym Leader");
+        PERMISSIONS.put("evolutionboost.gym.leader.water", "Is the Water Gym Leader");
     }
 
     /**
