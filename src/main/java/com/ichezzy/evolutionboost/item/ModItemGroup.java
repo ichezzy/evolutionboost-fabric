@@ -66,6 +66,9 @@ public final class ModItemGroup {
                             // ===== MINTS =====
                             output.accept(ModItems.UNIVERSAL_MINT);
 
+                            // ===== VOUCHER =====
+                            output.accept(ModItems.ABILITY_VOUCHER);
+
                             // ===== BOTTLE CAPS =====
                             output.accept(ModItems.BOTTLE_CAP_COPPER);
                             output.accept(ModItems.BOTTLE_CAP_SILVER);

@@ -165,7 +165,7 @@ public final class RewardConfig {
 
         // DAILY: 5x Bronze-Münze
         c.rewards.put("DAILY", List.of(
-                new RewardItem("evolutionboost:evolution_coin_bronze", 5)
+                new RewardItem("evolutionboost:evolution_coin_bronze", 1)
         ));
 
         // WEEKLY: 1x Silber-Münze

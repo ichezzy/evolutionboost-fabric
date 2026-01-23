@@ -460,7 +460,15 @@ public final class ModItems {
     // Universal Mint
     public static final Item UNIVERSAL_MINT = register(
             "universal_mint",
-            new EVResetItem(new Item.Properties().stacksTo(16).rarity(Rarity.EPIC))
+            new SimpleTooltipItem(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.universal_mint")
+    );
+
+    // Ability Voucher
+    public static final Item ABILITY_VOUCHER = register(
+            "ability_voucher",
+            new SimpleTooltipItem(new Item.Properties().stacksTo(16).rarity(Rarity.RARE),
+                    "tooltip.evolutionboost.ability_voucher")
     );
 
     // ---- Bottle Caps ----
