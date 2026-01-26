@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("dev.architectury.loom") version "1.7-SNAPSHOT"
+    id("dev.architectury.loom") version "1.7-SNAPSHOT"  // Bleibt bei 1.7 für Gradle 8.8
     id("architectury-plugin") version "3.4-SNAPSHOT"
     kotlin("jvm") version "1.9.23"
 }
@@ -19,13 +19,12 @@ loom {
     splitEnvironmentSourceSets()
 
     runs {
-        // Client 1
+        // Client 1 - OHNE Mixin debug (verursacht Cobblemon 1.6.1 Crash)
         named("client") {
             client()
             name("Client 1")
             runDir("run/client1")
-            vmArgs("-Dmixin.debug=true", "-Dmixin.dumpTargetOnFailure=true")
-            // eigener Name/UUID -> parallele Instanz möglich
+            // vmArgs ENTFERNT - Mixin debug macht Cobblemon 1.6.1 kaputt
             programArgs("--username", "TestOne", "--uuid", "00000000-0000-0000-0000-000000000001")
         }
         // Client 2
@@ -33,7 +32,6 @@ loom {
             client()
             name("Client 2")
             runDir("run/client2")
-            vmArgs("-Dmixin.debug=true", "-Dmixin.dumpTargetOnFailure=true")
             programArgs("--username", "TestTwo", "--uuid", "00000000-0000-0000-0000-000000000002")
         }
         // Dev-Server
@@ -41,7 +39,6 @@ loom {
             server()
             name("Dev Server")
             runDir("run/server")
-            vmArgs("-Dmixin.debug=true", "-Dmixin.dumpTargetOnFailure=true")
             // programArgs("--nogui")
         }
     }
@@ -55,8 +52,8 @@ java {
 repositories {
     mavenCentral()
     maven("https://maven.fabricmc.net/")
-    maven("https://api.modrinth.com/maven")      // Cobblemon (primär)
-    maven("https://cursemaven.com")              // Fallback
+    maven("https://api.modrinth.com/maven")
+    maven("https://cursemaven.com")
     maven("https://impactdevelopment.github.io/maven/")
     maven("https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/")
     maven("https://maven.impactdev.net/repository/development/")
@@ -67,32 +64,27 @@ repositories {
 }
 
 dependencies {
-    // Versionen für Fabric API gebündelt, 1.21.1
     val fabricVersion = "0.104.0+1.21.1"
 
-    // --- Minecraft + Mappings (WICHTIG: Mojang, kein Yarn) ---
+    // --- Minecraft + Mappings ---
     minecraft("net.minecraft:minecraft:1.21.1")
     mappings(loom.officialMojangMappings())
 
-    // --- Fabric Loader & vollständige Fabric API (inkl. HudRenderCallback usw.) ---
+    // --- Fabric Loader & API ---
     modImplementation("net.fabricmc:fabric-loader:0.16.5")
     modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricVersion")
 
-    // --- Kotlin-Runtime (Cobblemon benötigt sie) ---
+    // --- Kotlin-Runtime ---
     modImplementation("net.fabricmc:fabric-language-kotlin:1.12.3+kotlin.2.0.21")
 
-    // --- Cobblemon 1.6.1 (Fabric 1.21.1) ---
-    // Variante A: Modrinth Maven (empfohlen)
+    // --- Cobblemon 1.6.1 ---
     modImplementation("maven.modrinth:cobblemon:1.6.1")
 
-    // Variante B (Fallback): CurseMaven mit exakter File-ID
-    // modImplementation("curse.maven:cobblemon-687131:6125079")
-
-    // --- Tests (optional) ---
+    // --- Tests ---
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
 
-    // Trinkets Compile Only
+    // --- Trinkets ---
     modCompileOnly("dev.emi:trinkets:3.10.0")
 }
 

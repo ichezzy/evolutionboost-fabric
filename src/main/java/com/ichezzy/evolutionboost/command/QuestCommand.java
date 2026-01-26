@@ -1,5 +1,6 @@
 package com.ichezzy.evolutionboost.command;
 
+import com.ichezzy.evolutionboost.configs.RandomQuestConfig;
 import com.ichezzy.evolutionboost.permission.EvolutionboostPermissions;
 import com.ichezzy.evolutionboost.quest.*;
 import com.ichezzy.evolutionboost.quest.random.*;
@@ -112,6 +113,16 @@ public final class QuestCommand {
                                 .then(Commands.argument("quest", StringArgumentType.word())
                                         .suggests(QuestCommand::suggestReadyQuests)
                                         .executes(ctx -> playerTurninQuest(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "questline"),
+                                                StringArgumentType.getString(ctx, "quest"))))))
+
+                // /eb quest abandon <questline> <quest> - SPIELER bricht Quest ab
+                .then(Commands.literal("abandon")
+                        .then(Commands.argument("questline", StringArgumentType.word())
+                                .suggests(QuestCommand::suggestActiveQuestLines)
+                                .then(Commands.argument("quest", StringArgumentType.word())
+                                        .suggests(QuestCommand::suggestActiveQuests)
+                                        .executes(ctx -> playerAbandonQuest(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "questline"),
                                                 StringArgumentType.getString(ctx, "quest"))))))
 
@@ -344,6 +355,49 @@ public final class QuestCommand {
                         if (parts.length == 2) {
                             builder.suggest(parts[1]);
                         }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestActiveQuestLines(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        if (ctx.getSource().getEntity() instanceof ServerPlayer player) {
+            PlayerQuestData data = QuestManager.get().getPlayerData(player);
+            Set<String> lines = new java.util.HashSet<>();
+            // Aktive Quests
+            for (String questId : data.getQuestsByStatus(QuestStatus.ACTIVE)) {
+                String[] parts = questId.split(":", 2);
+                if (parts.length == 2) lines.add(parts[0]);
+            }
+            // Ready Quests (auch aktiv)
+            for (String questId : data.getQuestsByStatus(QuestStatus.READY_TO_COMPLETE)) {
+                String[] parts = questId.split(":", 2);
+                if (parts.length == 2) lines.add(parts[0]);
+            }
+            lines.forEach(builder::suggest);
+        }
+        return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestActiveQuests(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        try {
+            String questLine = StringArgumentType.getString(ctx, "questline");
+            if (ctx.getSource().getEntity() instanceof ServerPlayer player) {
+                PlayerQuestData data = QuestManager.get().getPlayerData(player);
+                // Aktive Quests
+                for (String questId : data.getQuestsByStatus(QuestStatus.ACTIVE)) {
+                    if (questId.startsWith(questLine + ":")) {
+                        String[] parts = questId.split(":", 2);
+                        if (parts.length == 2) builder.suggest(parts[1]);
+                    }
+                }
+                // Ready Quests
+                for (String questId : data.getQuestsByStatus(QuestStatus.READY_TO_COMPLETE)) {
+                    if (questId.startsWith(questLine + ":")) {
+                        String[] parts = questId.split(":", 2);
+                        if (parts.length == 2) builder.suggest(parts[1]);
                     }
                 }
             }
@@ -686,6 +740,57 @@ public final class QuestCommand {
         // Quest abgeben mit Item-Entfernung
         boolean success = QuestManager.get().completeQuestWithItemRemoval(player, fullId);
         return success ? 1 : 0;
+    }
+
+    private static int playerAbandonQuest(CommandSourceStack src, String questLine, String questId) {
+        if (!(src.getEntity() instanceof ServerPlayer player)) {
+            src.sendFailure(Component.literal("This command can only be used by players."));
+            return 0;
+        }
+
+        String fullId = buildFullId(questLine, questId);
+        var questOpt = QuestManager.get().getQuest(fullId);
+        if (questOpt.isEmpty()) {
+            src.sendFailure(Component.literal("Unknown quest: " + fullId));
+            return 0;
+        }
+
+        Quest quest = questOpt.get();
+        PlayerQuestData data = QuestManager.get().getPlayerData(player);
+        QuestStatus status = data.getStatus(fullId);
+
+        // Prüfe ob Quest aktiv ist (ACTIVE oder READY_TO_COMPLETE)
+        if (status != QuestStatus.ACTIVE && status != QuestStatus.READY_TO_COMPLETE) {
+            if (status == QuestStatus.COMPLETED) {
+                src.sendFailure(Component.literal("You have already completed this quest."));
+            } else if (status == QuestStatus.LOCKED) {
+                src.sendFailure(Component.literal("This quest is not unlocked yet."));
+            } else if (status == QuestStatus.AVAILABLE) {
+                src.sendFailure(Component.literal("This quest hasn't been started yet."));
+            } else {
+                src.sendFailure(Component.literal("This quest cannot be abandoned."));
+            }
+            return 0;
+        }
+
+        // Quest aufgeben - zurücksetzen auf AVAILABLE
+        data.resetQuest(fullId);  // Erst Progress löschen
+        data.setStatus(fullId, QuestStatus.AVAILABLE);  // Dann neuen Status setzen
+        QuestManager.get().savePlayerData(player.getUUID());
+
+        src.sendSuccess(() -> Component.literal("✗ ")
+                .withStyle(ChatFormatting.RED)
+                .append(Component.literal("Quest abandoned: ")
+                        .withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(quest.getName())
+                        .withStyle(ChatFormatting.YELLOW)), false);
+
+        src.sendSuccess(() -> Component.literal("  Progress has been reset. You can restart with ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/eb quest start " + questLine + " " + questId)
+                        .withStyle(ChatFormatting.AQUA)), false);
+
+        return 1;
     }
 
     // ==================== NPC/Server-Commands ====================

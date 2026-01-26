@@ -76,7 +76,7 @@ public enum RandomQuestPeriod {
     public int getBaseCoinAmount() {
         return switch (this) {
             case DAILY -> 5;   // 5 Bronze base
-            case WEEKLY -> 1;  // 1 Silver
+            case WEEKLY -> 3;  // 3 Silver (härter als vorher)
             case MONTHLY -> 1; // 1 Gold
         };
     }

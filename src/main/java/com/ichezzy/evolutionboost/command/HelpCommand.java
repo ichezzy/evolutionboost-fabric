@@ -30,6 +30,8 @@ public final class HelpCommand {
                         .executes(ctx -> showQuestHelp(ctx.getSource())))
                 .then(Commands.literal("dex")
                         .executes(ctx -> showDexHelp(ctx.getSource())))
+                .then(Commands.literal("gym")
+                        .executes(ctx -> showGymHelp(ctx.getSource())))
                 .then(Commands.literal("admin")
                         .executes(ctx -> showAdminHelp(ctx.getSource())))
                 .then(Commands.literal("rewards")
@@ -75,7 +77,7 @@ public final class HelpCommand {
     private static void showPage1(CommandSourceStack src) {
         src.sendSuccess(() -> Component.literal("Use /eb help <topic> for details")
                 .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), false);
-        src.sendSuccess(() -> Component.literal("Topics: boost, quest, dex, admin, rewards, weather")
+        src.sendSuccess(() -> Component.literal("Topics: boost, quest, dex, gym, admin, rewards, weather")
                 .withStyle(ChatFormatting.DARK_GRAY), false);
         src.sendSuccess(() -> Component.empty(), false);
 
@@ -157,7 +159,7 @@ public final class HelpCommand {
 
         src.sendSuccess(() -> section("Random Quests"), false);
         sendCmdDetail(src, "/eb quest daily", "View daily quest", "Reward: 5-10 Bronze Coins (base 5 + streak up to +5)");
-        sendCmdDetail(src, "/eb quest weekly", "View weekly quest", "Reward: 1 Silver Coin");
+        sendCmdDetail(src, "/eb quest weekly", "View weekly quest", "Reward: 3 Silver Coins");
         sendCmdDetail(src, "/eb quest monthly", "View monthly quest", "Reward: 1 Gold Coin");
         sendCmdDetail(src, "/eb quest turnin <daily|weekly|monthly>", "Turn in completed quest");
 
@@ -261,6 +263,45 @@ public final class HelpCommand {
         sendCmdDetail(src, "/eb weather christmas enable/disable", "Toggle weather system");
         sendCmdDetail(src, "/eb weather christmas storm on/off", "Toggle blizzard");
         sendCmdDetail(src, "/eb weather christmas auto on/off", "Toggle auto-cycle");
+
+        src.sendSuccess(() -> footer(), false);
+        return 1;
+    }
+
+    private static int showGymHelp(CommandSourceStack src) {
+        src.sendSuccess(() -> header("Gym Commands"), false);
+
+        src.sendSuccess(() -> section("Player Commands"), false);
+        sendCmdDetail(src, "/eb gym list", "Show all gyms and their leaders");
+        sendCmdDetail(src, "/eb gym info <gymtype>", "Show details for a gym");
+        sendCmdDetail(src, "/eb gym challenge <gymtype>", "Challenge a gym leader");
+        sendCmdDetail(src, "/eb gym accept", "Accept a challenge (as leader)");
+        sendCmdDetail(src, "/eb gym decline", "Decline a challenge (as leader)");
+        sendCmdDetail(src, "/eb gym stats [player]", "Show gym battle statistics");
+        sendCmdDetail(src, "/eb gym rules <gymtype> info", "View gym battle rules");
+
+        src.sendSuccess(() -> section("Leader Commands"), false);
+        sendCmdDetail(src, "/eb gym register <gymtype>", 
+                "Register your team as gym leader",
+                "Team can be changed once per month");
+        sendCmdDetail(src, "/eb gym rules <gymtype> set <format> <levelcap>",
+                "Set battle rules for your gym",
+                "Format: singles or doubles",
+                "Level cap: 50 or 100");
+
+        if (hasPermission(src, "evolutionboost.gym.admin", 2)) {
+            src.sendSuccess(() -> section("Admin Commands"), false);
+            sendCmdDetail(src, "/eb gym admin setleader <gymtype> <player>", "Appoint a gym leader");
+            sendCmdDetail(src, "/eb gym admin removeleader <gymtype> [reason]", "Remove a gym leader");
+            sendCmdDetail(src, "/eb gym admin rewards <gymtype> <badge> <tm> <coins>", "Set gym rewards");
+            sendCmdDetail(src, "/eb gym admin info <gymtype>", "Show detailed gym info");
+            sendCmdDetail(src, "/eb gym admin enable/disable <gymtype>", "Enable/disable a gym");
+            sendCmdDetail(src, "/eb gym admin resetstats <player|all>", "Reset player gym stats");
+            sendCmdDetail(src, "/eb gym admin resetteam <gymtype>", "Reset leader's registered team");
+            sendCmdDetail(src, "/eb gym admin rules <gymtype> set/reset", "Set or reset gym rules");
+            sendCmdDetail(src, "/eb gym admin history [lines]", "Show leader history");
+            sendCmdDetail(src, "/eb gym admin reload", "Reload gym config");
+        }
 
         src.sendSuccess(() -> footer(), false);
         return 1;

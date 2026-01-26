@@ -1,9 +1,14 @@
 package com.ichezzy.evolutionboost.gym;
 
+import com.cobblemon.mod.common.Cobblemon;
+import com.cobblemon.mod.common.api.storage.party.PlayerPartyStore;
+import com.cobblemon.mod.common.pokemon.Pokemon;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.GymConfig;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.BufferedReader;
@@ -14,6 +19,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -26,6 +32,7 @@ import java.util.*;
  * - Monthly Reward Claims
  * - Player Stats
  * - Leader Battle-Counter
+ * - Registrierte Leader-Teams + Rules
  */
 public final class GymData {
 
@@ -38,18 +45,16 @@ public final class GymData {
 
     // ==================== Daten-Strukturen ====================
 
-    /** Alle Battles (für Statistiken, gekürzt nach X Monaten) */
+    /** Alle Battles (für Statistiken) */
     public List<BattleRecord> battles = new ArrayList<>();
 
     /** 
      * Monthly Reward Claims: "YYYY-MM" -> "gymType" -> [player UUIDs die geclaimt haben]
-     * Beispiel: "2026-01" -> "bug" -> ["uuid1", "uuid2"]
      */
     public Map<String, Map<String, Set<String>>> monthlyRewardsClaimed = new HashMap<>();
 
     /**
      * Leader Battle Counter pro Monat: "YYYY-MM" -> "leaderUUID" -> battleCount
-     * Für die Mindestanzahl Kämpfe für Monthly Rewards
      */
     public Map<String, Map<String, Integer>> leaderBattlesPerMonth = new HashMap<>();
 
@@ -57,6 +62,11 @@ public final class GymData {
      * Player Stats (persistent)
      */
     public Map<String, PlayerGymStats> playerStats = new HashMap<>();
+
+    /**
+     * Registrierte Leader-Teams + Rules: "gymType" -> LeaderTeamData
+     */
+    public Map<String, LeaderTeamData> leaderTeams = new HashMap<>();
 
     // ==================== Record-Klassen ====================
 
@@ -99,13 +109,92 @@ public final class GymData {
         public int totalBattles = 0;
         public int wins = 0;
         public int losses = 0;
-        public Set<String> badgesEarned = new HashSet<>(); // Gym-Types
+        public Set<String> badgesEarned = new HashSet<>();
         public int battlesAsLeader = 0;
         public int winsAsLeader = 0;
 
         public double getWinRate() {
             if (totalBattles == 0) return 0;
             return (double) wins / totalBattles * 100;
+        }
+
+        public double getLeaderWinRate() {
+            if (battlesAsLeader == 0) return 0;
+            return (double) winsAsLeader / battlesAsLeader * 100;
+        }
+    }
+
+    /**
+     * Gespeichertes Team und Rules eines Gym Leaders.
+     */
+    public static class LeaderTeamData {
+        /** Leader UUID */
+        public String leaderUUID;
+        
+        /** Leader Name */
+        public String leaderName;
+        
+        /** Battle-Format: "singles" oder "doubles" */
+        public String battleFormat = "singles";
+        
+        /** Level Cap: 50 oder 100 (0 = kein Cap) */
+        public int levelCap = 50;
+        
+        /** Wann wurde das Team zuletzt geändert? (ISO-8601) */
+        public String lastTeamChange;
+        
+        /** Wann wurden die Rules zuletzt geändert? (ISO-8601) */
+        public String lastRulesChange;
+        
+        /** Die Pokémon im Team (Species + Form) */
+        public List<TeamPokemon> team = new ArrayList<>();
+
+        public LeaderTeamData() {}
+
+        public LeaderTeamData(String leaderUUID, String leaderName) {
+            this.leaderUUID = leaderUUID;
+            this.leaderName = leaderName;
+            this.battleFormat = "singles";
+            this.levelCap = 50;
+            this.lastTeamChange = Instant.now().toString();
+            this.lastRulesChange = Instant.now().toString();
+            this.team = new ArrayList<>();
+        }
+    }
+
+    /**
+     * Ein Pokémon im gespeicherten Team.
+     */
+    public static class TeamPokemon {
+        /** Species (z.B. "pikachu") */
+        public String species;
+        
+        /** Form (z.B. "alolan", "" für normal) */
+        public String form = "";
+        
+        /** Level beim Registrieren */
+        public int level;
+        
+        /** Pokémon UUID (für Identifikation) */
+        public String pokemonUUID;
+
+        public TeamPokemon() {}
+
+        public TeamPokemon(String species, String form, int level, String pokemonUUID) {
+            this.species = species;
+            this.form = form != null ? form : "";
+            this.level = level;
+            this.pokemonUUID = pokemonUUID;
+        }
+
+        /**
+         * Erstellt einen einzigartigen Key für Vergleiche (species-form).
+         */
+        public String getKey() {
+            if (form == null || form.isEmpty()) {
+                return species.toLowerCase();
+            }
+            return species.toLowerCase() + "-" + form.toLowerCase();
         }
     }
 
@@ -128,7 +217,7 @@ public final class GymData {
 
     private static Path getDataFile() {
         if (SERVER == null) {
-            return Path.of("config", "evolutionboost", "gym_data.json");
+            return Path.of("config", "evolutionboost", "gym", "gym_data.json");
         }
         Path worldDir = SERVER.getWorldPath(LevelResource.ROOT).resolve("evolutionboost");
         try { Files.createDirectories(worldDir); } catch (Exception ignored) {}
@@ -169,6 +258,259 @@ public final class GymData {
         if (monthlyRewardsClaimed == null) monthlyRewardsClaimed = new HashMap<>();
         if (leaderBattlesPerMonth == null) leaderBattlesPerMonth = new HashMap<>();
         if (playerStats == null) playerStats = new HashMap<>();
+        if (leaderTeams == null) leaderTeams = new HashMap<>();
+        
+        // Migration: Alte Daten ohne levelCap/lastRulesChange
+        for (LeaderTeamData data : leaderTeams.values()) {
+            if (data.levelCap == 0) data.levelCap = 50;
+            if (data.lastRulesChange == null) data.lastRulesChange = data.lastTeamChange;
+        }
+    }
+
+    // ==================== Team Registration ====================
+
+    /**
+     * Registriert das Team eines Leaders.
+     */
+    public void registerLeaderTeam(String gymType, ServerPlayer leader, List<TeamPokemon> team) {
+        LeaderTeamData teamData = leaderTeams.computeIfAbsent(
+                gymType.toLowerCase(), 
+                k -> new LeaderTeamData(leader.getStringUUID(), leader.getName().getString())
+        );
+        
+        teamData.leaderUUID = leader.getStringUUID();
+        teamData.leaderName = leader.getName().getString();
+        teamData.team = team;
+        teamData.lastTeamChange = Instant.now().toString();
+        
+        save();
+        EvolutionBoost.LOGGER.info("[gym] Registered team for {} Gym Leader {} ({} Pokemon)", 
+                gymType, leader.getName().getString(), team.size());
+    }
+
+    /**
+     * Setzt die Rules für ein Gym (Format + Level Cap).
+     */
+    public void setGymRules(String gymType, String battleFormat, int levelCap) {
+        LeaderTeamData teamData = leaderTeams.get(gymType.toLowerCase());
+        if (teamData != null) {
+            teamData.battleFormat = battleFormat;
+            teamData.levelCap = levelCap;
+            teamData.lastRulesChange = Instant.now().toString();
+            save();
+            EvolutionBoost.LOGGER.info("[gym] Updated rules for {} Gym: format={}, levelCap={}", 
+                    gymType, battleFormat, levelCap);
+        }
+    }
+
+    /**
+     * Holt das registrierte Team eines Leaders.
+     */
+    public LeaderTeamData getLeaderTeam(String gymType) {
+        return leaderTeams.get(gymType.toLowerCase());
+    }
+
+    /**
+     * Entfernt das registrierte Team (wenn Leader entfernt wird).
+     */
+    public void removeLeaderTeam(String gymType) {
+        leaderTeams.remove(gymType.toLowerCase());
+        save();
+    }
+
+    /**
+     * Setzt nur das Team zurück (nicht die Rules).
+     */
+    public void resetLeaderTeam(String gymType) {
+        LeaderTeamData teamData = leaderTeams.get(gymType.toLowerCase());
+        if (teamData != null) {
+            teamData.team = new ArrayList<>();
+            teamData.lastTeamChange = null;
+            save();
+            
+            // Auch in Config als nicht-registriert markieren
+            GymConfig.GymEntry gym = GymConfig.get().getGym(gymType);
+            if (gym != null) {
+                gym.leaderRegistered = false;
+                GymConfig.save();
+            }
+            
+            EvolutionBoost.LOGGER.info("[gym] Reset team for {} Gym", gymType);
+        }
+    }
+
+    /**
+     * Setzt die Rules zurück (erlaubt sofortige Änderung).
+     */
+    public void resetGymRules(String gymType) {
+        LeaderTeamData teamData = leaderTeams.get(gymType.toLowerCase());
+        if (teamData != null) {
+            teamData.lastRulesChange = null;
+            save();
+            EvolutionBoost.LOGGER.info("[gym] Reset rules timer for {} Gym", gymType);
+        }
+    }
+
+    /**
+     * Prüft ob ein Leader sein Team ändern darf (basierend auf Intervall).
+     */
+    public boolean canChangeTeam(String gymType) {
+        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
+        if (team == null || team.lastTeamChange == null) return true;
+
+        int intervalDays = GymConfig.get().teamChangeIntervalDays;
+        if (intervalDays <= 0) return true;
+
+        try {
+            Instant lastChange = Instant.parse(team.lastTeamChange);
+            Instant now = Instant.now();
+            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
+            return daysSinceChange >= intervalDays;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /**
+     * Prüft ob ein Leader die Rules ändern darf (basierend auf Intervall).
+     */
+    public boolean canChangeRules(String gymType) {
+        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
+        if (team == null || team.lastRulesChange == null) return true;
+
+        int intervalDays = GymConfig.get().teamChangeIntervalDays; // Gleicher Intervall wie Team
+        if (intervalDays <= 0) return true;
+
+        try {
+            Instant lastChange = Instant.parse(team.lastRulesChange);
+            Instant now = Instant.now();
+            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
+            return daysSinceChange >= intervalDays;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /**
+     * Gibt die Tage bis zur nächsten möglichen Team-Änderung zurück.
+     */
+    public int getDaysUntilTeamChange(String gymType) {
+        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
+        if (team == null || team.lastTeamChange == null) return 0;
+
+        int intervalDays = GymConfig.get().teamChangeIntervalDays;
+        if (intervalDays <= 0) return 0;
+
+        try {
+            Instant lastChange = Instant.parse(team.lastTeamChange);
+            Instant now = Instant.now();
+            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
+            int remaining = intervalDays - (int) daysSinceChange;
+            return Math.max(0, remaining);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Gibt die Tage bis zur nächsten möglichen Rules-Änderung zurück.
+     */
+    public int getDaysUntilRulesChange(String gymType) {
+        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
+        if (team == null || team.lastRulesChange == null) return 0;
+
+        int intervalDays = GymConfig.get().teamChangeIntervalDays;
+        if (intervalDays <= 0) return 0;
+
+        try {
+            Instant lastChange = Instant.parse(team.lastRulesChange);
+            Instant now = Instant.now();
+            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
+            int remaining = intervalDays - (int) daysSinceChange;
+            return Math.max(0, remaining);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    // ==================== Team Validation ====================
+
+    /**
+     * Validiert ob der Leader das registrierte Team hat.
+     * @return null wenn valid, sonst Fehlermeldung
+     */
+    public String validateLeaderTeam(ServerPlayer leader, String gymType) {
+        LeaderTeamData teamData = leaderTeams.get(gymType.toLowerCase());
+        if (teamData == null || teamData.team == null || teamData.team.isEmpty()) {
+            return "No team registered for this gym.";
+        }
+
+        // Hole aktuelles Team des Leaders
+        PlayerPartyStore party = Cobblemon.INSTANCE.getStorage().getParty(leader);
+        
+        // Sammle aktuelle Pokémon (Species-Form Keys)
+        Set<String> currentTeamKeys = new HashSet<>();
+        for (int i = 0; i < 6; i++) {
+            Pokemon pokemon = party.get(i);
+            if (pokemon != null) {
+                String species = pokemon.getSpecies().getName().toLowerCase();
+                String form = pokemon.getForm().getName();
+                if (form.equalsIgnoreCase("normal") || form.equalsIgnoreCase("default")) {
+                    form = "";
+                }
+                String key = form.isEmpty() ? species : species + "-" + form.toLowerCase();
+                currentTeamKeys.add(key);
+            }
+        }
+
+        // Sammle registrierte Pokémon Keys
+        Set<String> registeredKeys = new HashSet<>();
+        for (TeamPokemon tp : teamData.team) {
+            registeredKeys.add(tp.getKey());
+        }
+
+        // Prüfe ob alle registrierten Pokémon vorhanden sind
+        if (!currentTeamKeys.equals(registeredKeys)) {
+            // Finde fehlende Pokémon
+            Set<String> missing = new HashSet<>(registeredKeys);
+            missing.removeAll(currentTeamKeys);
+            
+            Set<String> extra = new HashSet<>(currentTeamKeys);
+            extra.removeAll(registeredKeys);
+            
+            StringBuilder sb = new StringBuilder("Team mismatch! ");
+            if (!missing.isEmpty()) {
+                sb.append("Missing: ").append(String.join(", ", missing)).append(". ");
+            }
+            if (!extra.isEmpty()) {
+                sb.append("Not registered: ").append(String.join(", ", extra)).append(".");
+            }
+            return sb.toString();
+        }
+
+        return null; // Valid
+    }
+
+    /**
+     * Holt das Battle-Format für ein Gym.
+     */
+    public String getBattleFormat(String gymType) {
+        LeaderTeamData teamData = leaderTeams.get(gymType.toLowerCase());
+        if (teamData != null && teamData.battleFormat != null) {
+            return teamData.battleFormat;
+        }
+        return "singles";
+    }
+
+    /**
+     * Holt das Level-Cap für ein Gym.
+     */
+    public int getLevelCap(String gymType) {
+        LeaderTeamData teamData = leaderTeams.get(gymType.toLowerCase());
+        if (teamData != null && teamData.levelCap > 0) {
+            return teamData.levelCap;
+        }
+        return 50; // Default
     }
 
     // ==================== Battle Recording ====================
@@ -213,9 +555,6 @@ public final class GymData {
 
     // ==================== Monthly Rewards ====================
 
-    /**
-     * Prüft ob ein Spieler diesen Monat bereits Rewards für ein Gym geclaimt hat.
-     */
     public boolean hasClaimedThisMonth(String playerUUID, String gymType) {
         String month = getCurrentMonth();
         Map<String, Set<String>> gymMap = monthlyRewardsClaimed.get(month);
@@ -224,9 +563,6 @@ public final class GymData {
         return claimed != null && claimed.contains(playerUUID);
     }
 
-    /**
-     * Markiert dass ein Spieler Rewards geclaimt hat.
-     */
     public void markRewardClaimed(String playerUUID, String gymType) {
         String month = getCurrentMonth();
         monthlyRewardsClaimed
@@ -236,9 +572,6 @@ public final class GymData {
         save();
     }
 
-    /**
-     * Fügt ein Badge zu den Player Stats hinzu.
-     */
     public void addBadge(String playerUUID, String gymType) {
         PlayerGymStats stats = playerStats.computeIfAbsent(playerUUID, k -> new PlayerGymStats());
         stats.badgesEarned.add(gymType);
@@ -247,9 +580,6 @@ public final class GymData {
 
     // ==================== Leader Stats ====================
 
-    /**
-     * Holt die Anzahl Kämpfe eines Leaders diesen Monat.
-     */
     public int getLeaderBattlesThisMonth(String leaderUUID) {
         String month = getCurrentMonth();
         Map<String, Integer> monthMap = leaderBattlesPerMonth.get(month);
@@ -257,9 +587,6 @@ public final class GymData {
         return monthMap.getOrDefault(leaderUUID, 0);
     }
 
-    /**
-     * Prüft ob ein Leader genug Kämpfe für Monthly Rewards hat.
-     */
     public boolean leaderHasEnoughBattles(String leaderUUID) {
         int required = GymConfig.get().leaderMinBattlesForMonthlyReward;
         return getLeaderBattlesThisMonth(leaderUUID) >= required;
@@ -267,34 +594,45 @@ public final class GymData {
 
     // ==================== Player Stats ====================
 
-    /**
-     * Holt die Stats eines Spielers.
-     */
     public PlayerGymStats getPlayerStats(String playerUUID) {
         return playerStats.computeIfAbsent(playerUUID, k -> new PlayerGymStats());
     }
 
-    /**
-     * Prüft ob ein Spieler ein bestimmtes Badge hat.
-     */
     public boolean hasBadge(String playerUUID, String gymType) {
         PlayerGymStats stats = playerStats.get(playerUUID);
         return stats != null && stats.badgesEarned.contains(gymType);
     }
 
-    // ==================== Utility ====================
-
-    private static String getCurrentMonth() {
-        return YearMonth.now(ZoneId.of("Europe/Berlin")).toString(); // "2026-01"
+    /**
+     * Setzt die Stats eines Spielers zurück.
+     */
+    public void resetPlayerStats(String playerUUID) {
+        playerStats.remove(playerUUID);
+        save();
+        EvolutionBoost.LOGGER.info("[gym] Reset stats for player {}", playerUUID);
     }
 
     /**
-     * Cleanup: Alte Daten entfernen (älter als X Monate).
+     * Setzt die Stats aller Spieler zurück.
+     */
+    public void resetAllPlayerStats() {
+        playerStats.clear();
+        save();
+        EvolutionBoost.LOGGER.info("[gym] Reset all player stats");
+    }
+
+    // ==================== Utility ====================
+
+    private static String getCurrentMonth() {
+        return YearMonth.now(ZoneId.of("Europe/Berlin")).toString();
+    }
+
+    /**
+     * Cleanup: Alte Daten entfernen.
      */
     public void cleanup(int keepMonths) {
         YearMonth cutoff = YearMonth.now().minusMonths(keepMonths);
         
-        // Alte Monthly Claims entfernen
         monthlyRewardsClaimed.keySet().removeIf(month -> {
             try {
                 return YearMonth.parse(month).isBefore(cutoff);
@@ -303,7 +641,6 @@ public final class GymData {
             }
         });
 
-        // Alte Leader Battle Counts entfernen
         leaderBattlesPerMonth.keySet().removeIf(month -> {
             try {
                 return YearMonth.parse(month).isBefore(cutoff);
@@ -312,7 +649,6 @@ public final class GymData {
             }
         });
 
-        // Alte Battles entfernen (aber Stats behalten)
         Instant cutoffInstant = cutoff.atDay(1).atStartOfDay(ZoneId.of("Europe/Berlin")).toInstant();
         battles.removeIf(b -> {
             try {

@@ -1,9 +1,9 @@
 package com.ichezzy.evolutionboost.quest.random;
 
 import com.google.gson.*;
-import com.google.gson.reflect.TypeToken;
 import com.ichezzy.evolutionboost.EvolutionBoost;
 import com.ichezzy.evolutionboost.configs.NotificationConfig;
+import com.ichezzy.evolutionboost.configs.RandomQuestConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.*;
-import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

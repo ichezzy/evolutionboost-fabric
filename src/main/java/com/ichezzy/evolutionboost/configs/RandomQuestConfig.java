@@ -1,7 +1,8 @@
-package com.ichezzy.evolutionboost.quest.random;
+package com.ichezzy.evolutionboost.configs;
 
 import com.google.gson.*;
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.quest.random.RandomQuestPeriod;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
@@ -196,18 +197,19 @@ public class RandomQuestConfig {
         ));
 
         // ==================== WEEKLY ====================
+        // 3 Silver Coins Belohnung - daher härter als vorher
         config.weekly.objectiveCount = 3;
         config.weekly.pool = new ArrayList<>(List.of(
-                new ObjectiveTemplate("catch_any", 6, 75, 150),
-                new ObjectiveTemplate("catch_type", 10, 30, 60).withTypes(commonTypes),
-                new ObjectiveTemplate("catch_ha", 6, 2, 5),
-                new ObjectiveTemplate("catch_nature", 5, 5, 12).withNatures(natures),
-                new ObjectiveTemplate("catch_shiny", 2, 1, 1), // Immer genau 1
-                new ObjectiveTemplate("defeat_wild", 6, 50, 100),
-                new ObjectiveTemplate("defeat_type", 8, 20, 40).withTypes(commonTypes),
-                new ObjectiveTemplate("evolve", 7, 5, 12),
-                new ObjectiveTemplate("gain_xp", 6, 30000, 75000),
-                new ObjectiveTemplate("level_up", 5, 15, 30)
+                new ObjectiveTemplate("catch_any", 6, 100, 200),      // +33% (war 75-150)
+                new ObjectiveTemplate("catch_type", 10, 40, 80).withTypes(commonTypes), // +33% (war 30-60)
+                new ObjectiveTemplate("catch_ha", 6, 3, 7),           // +40% (war 2-5)
+                new ObjectiveTemplate("catch_nature", 5, 8, 18).withNatures(natures), // +50% (war 5-12)
+                new ObjectiveTemplate("catch_shiny", 2, 1, 2),        // Möglich jetzt 1-2 (war immer 1)
+                new ObjectiveTemplate("defeat_wild", 6, 75, 150),     // +50% (war 50-100)
+                new ObjectiveTemplate("defeat_type", 8, 30, 60).withTypes(commonTypes), // +50% (war 20-40)
+                new ObjectiveTemplate("evolve", 7, 8, 18),            // +50% (war 5-12)
+                new ObjectiveTemplate("gain_xp", 6, 50000, 120000),   // +60% (war 30000-75000)
+                new ObjectiveTemplate("level_up", 5, 25, 50)          // +67% (war 15-30)
         ));
 
         // ==================== MONTHLY ====================

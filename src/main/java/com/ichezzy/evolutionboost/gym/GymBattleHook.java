@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
  * Trackt Gym-Battles und vergibt Rewards bei Challenger-Sieg.
  * 
  * Nur Battles die über /eb gym challenge gestartet wurden zählen!
+ * Forfeits werden NICHT gezählt.
  */
 public final class GymBattleHook {
 
@@ -28,6 +29,27 @@ public final class GymBattleHook {
     private static Unit onBattleVictory(BattleVictoryEvent event) {
         try {
             PokemonBattle battle = event.getBattle();
+            
+            // Prüfe ob es ein Forfeit war - wenn ja, nicht zählen!
+            // Bei einem Forfeit sind nicht alle Pokemon des Verlierers KO
+            boolean wasForfeit = false;
+            try {
+                for (BattleActor loser : event.getLosers()) {
+                    // Prüfe alle Pokemon des Verlierers
+                    var pokemonList = loser.getPokemonList();
+                    for (var bp : pokemonList) {
+                        // Wenn ein Pokemon noch HP hat, war es ein Forfeit
+                        if (bp.getHealth() > 0) {
+                            wasForfeit = true;
+                            break;
+                        }
+                    }
+                    if (wasForfeit) break;
+                }
+            } catch (Exception e) {
+                // Bei API-Fehlern: sicher annehmen es war kein Forfeit
+                EvolutionBoost.LOGGER.debug("[gym] Could not check for forfeit: {}", e.getMessage());
+            }
             
             // Finde die beiden Spieler
             ServerPlayer player1 = null;
@@ -55,13 +77,16 @@ public final class GymBattleHook {
 
             // Prüfe ob einer der Spieler ein aktives Gym-Battle hat
             GymManager mgr = GymManager.get();
-            GymManager.ActiveBattle activeBattle = null;
-
-            // Suche nach aktivem Battle mit diesen beiden Spielern
-            activeBattle = mgr.findActiveBattle(player1.getUUID(), player2.getUUID());
+            GymManager.ActiveBattle activeBattle = mgr.findActiveBattle(player1.getUUID(), player2.getUUID());
             
             if (activeBattle == null) {
                 return Unit.INSTANCE; // Kein getracktes Gym-Battle
+            }
+
+            // Bei Forfeit: Battle abbrechen, nicht zählen
+            if (wasForfeit) {
+                mgr.cancelBattle(activeBattle, "Forfeit - battle does not count");
+                return Unit.INSTANCE;
             }
 
             // Wer hat gewonnen?

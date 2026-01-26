@@ -1,6 +1,7 @@
 package com.ichezzy.evolutionboost.gym;
 
 import com.ichezzy.evolutionboost.EvolutionBoost;
+import com.ichezzy.evolutionboost.configs.GymConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -72,10 +73,16 @@ public final class GymManager {
         String oldLeader = gym.currentLeader;
         String oldLeaderUUID = gym.currentLeaderUUID;
 
+        // Altes Team entfernen wenn Leader wechselt
+        if (oldLeaderUUID != null && !oldLeaderUUID.equals(player.getStringUUID())) {
+            GymData.get().removeLeaderTeam(gymType.getId());
+        }
+
         // Neuen Leader setzen
         gym.currentLeader = player.getGameProfile().getName();
         gym.currentLeaderUUID = player.getStringUUID();
         gym.leaderStartDate = Instant.now().toString();
+        gym.leaderRegistered = false; // Muss Team neu registrieren
 
         GymConfig.save();
 
@@ -106,9 +113,15 @@ public final class GymManager {
         String oldLeader = gym.currentLeader;
         String oldLeaderUUID = gym.currentLeaderUUID;
 
+        // Altes Team entfernen wenn Leader wechselt
+        if (oldLeaderUUID != null && !oldLeaderUUID.equals(playerUUID)) {
+            GymData.get().removeLeaderTeam(gymType.getId());
+        }
+
         gym.currentLeader = playerName;
         gym.currentLeaderUUID = playerUUID;
         gym.leaderStartDate = Instant.now().toString();
+        gym.leaderRegistered = false; // Muss Team neu registrieren
 
         GymConfig.save();
 
@@ -135,9 +148,13 @@ public final class GymManager {
         String oldLeader = gym.currentLeader;
         String oldLeaderUUID = gym.currentLeaderUUID;
 
+        // Team entfernen
+        GymData.get().removeLeaderTeam(gymType.getId());
+
         gym.currentLeader = null;
         gym.currentLeaderUUID = null;
         gym.leaderStartDate = null;
+        gym.leaderRegistered = false;
 
         GymConfig.save();
 
@@ -218,7 +235,8 @@ public final class GymManager {
      * @return Fehlermeldung oder null bei Erfolg
      */
     public String createChallenge(ServerPlayer challenger, GymType gymType) {
-        GymConfig.GymEntry gym = GymConfig.get().getGym(gymType);
+        GymConfig cfg = GymConfig.get();
+        GymConfig.GymEntry gym = cfg.getGym(gymType);
         
         // Prüfungen
         if (gym == null || !gym.enabled) {
@@ -229,6 +247,11 @@ public final class GymManager {
         }
         if (challenger.getStringUUID().equals(gym.currentLeaderUUID)) {
             return "You cannot challenge your own gym!";
+        }
+        
+        // Team-Registrierung prüfen
+        if (cfg.requireTeamRegistration && !gym.leaderRegistered) {
+            return "The gym leader has not registered their team yet.";
         }
         
         // Leader online?
@@ -343,21 +366,118 @@ public final class GymManager {
 
     /**
      * Startet ein Cobblemon Battle zwischen Challenger und Leader.
+     * Prüft zuerst das Team des Leaders und nutzt dann das konfigurierte Format.
      */
     private String startGymBattle(ServerPlayer challenger, ServerPlayer leader, GymType gymType) {
         try {
-            // Cobblemon Battle via Command starten
-            // Format: /pokebattle <player1> <player2>
-            String command = "pokebattle " + challenger.getGameProfile().getName() + 
-                           " " + leader.getGameProfile().getName();
+            GymData data = GymData.get();
             
-            server.getCommands().performPrefixedCommand(
-                    server.createCommandSourceStack().withSuppressedOutput(), 
-                    command
-            );
+            // ========== Team-Validierung ==========
+            String teamError = data.validateLeaderTeam(leader, gymType.getId());
+            if (teamError != null) {
+                // Benachrichtige beide Spieler
+                Component errorMsg = Component.literal("✗ ")
+                        .withStyle(ChatFormatting.RED)
+                        .append(Component.literal("Battle cannot start: " + teamError)
+                                .withStyle(ChatFormatting.YELLOW));
+                leader.sendSystemMessage(errorMsg);
+                challenger.sendSystemMessage(errorMsg);
+                
+                leader.sendSystemMessage(Component.literal("  Please use your registered team!")
+                        .withStyle(ChatFormatting.GRAY));
+                
+                return teamError;
+            }
+            
+            // ========== Format und Level-Cap holen ==========
+            String battleFormatStr = data.getBattleFormat(gymType.getId());
+            int levelCap = data.getLevelCap(gymType.getId());
+            boolean isDoubles = "doubles".equalsIgnoreCase(battleFormatStr);
+            
+            EvolutionBoost.LOGGER.info("[gym] Starting {} battle with level cap {} for {} Gym",
+                    battleFormatStr, levelCap, gymType.getDisplayName());
+            
+            boolean battleStarted = false;
+            
+            // ========== Battle starten via BattleBuilder API mit Custom Format ==========
+            try {
+                var battleBuilder = com.cobblemon.mod.common.battles.BattleBuilder.INSTANCE;
+                
+                // Basis-Format holen (Singles oder Doubles)
+                com.cobblemon.mod.common.battles.BattleFormat baseFormat = isDoubles
+                        ? com.cobblemon.mod.common.battles.BattleFormat.Companion.getGEN_9_DOUBLES()
+                        : com.cobblemon.mod.common.battles.BattleFormat.Companion.getGEN_9_SINGLES();
+                
+                // Custom Format mit Level-Cap erstellen
+                // BattleFormat.copy(mod, battleType, ruleSet, gen, adjustLevel)
+                com.cobblemon.mod.common.battles.BattleFormat gymFormat = baseFormat.copy(
+                        baseFormat.getMod(),
+                        baseFormat.getBattleType(),
+                        baseFormat.getRuleSet(),
+                        baseFormat.getGen(),
+                        levelCap > 0 ? levelCap : -1  // adjustLevel (-1 = aus)
+                );
+                
+                EvolutionBoost.LOGGER.debug("[gym] Created BattleFormat: type={}, adjustLevel={}",
+                        gymFormat.getBattleType().getName(), gymFormat.getAdjustLevel());
+                
+                // Battle starten mit Custom Format
+                var result = battleBuilder.pvp1v1(
+                        challenger,
+                        leader,
+                        null,  // leadingPokemonPlayer1
+                        null,  // leadingPokemonPlayer2
+                        gymFormat,  // Custom BattleFormat mit Level-Cap
+                        false,  // cloneParties
+                        false,  // healFirst
+                        player -> com.cobblemon.mod.common.Cobblemon.INSTANCE.getStorage().getParty(player)
+                );
+                
+                if (result instanceof com.cobblemon.mod.common.battles.SuccessfulBattleStart) {
+                    battleStarted = true;
+                    EvolutionBoost.LOGGER.info("[gym] Battle started via BattleBuilder API ({}, Lv.{})",
+                            battleFormatStr, levelCap > 0 ? levelCap : "none");
+                } else if (result instanceof com.cobblemon.mod.common.battles.ErroredBattleStart erroredStart) {
+                    // Fehler an Spieler senden (mit Identity-Transformer)
+                    erroredStart.sendTo(java.util.List.of(challenger, leader), c -> c);
+                    EvolutionBoost.LOGGER.debug("[gym] BattleBuilder returned error");
+                }
+            } catch (Exception apiError) {
+                EvolutionBoost.LOGGER.warn("[gym] BattleBuilder API failed: {}", apiError.getMessage());
+                apiError.printStackTrace();
+            }
+            
+            // ========== Fallback: Commands (ohne Format/Level-Cap) ==========
+            if (!battleStarted) {
+                try {
+                    String command = "pokebattleother " + challenger.getGameProfile().getName() + 
+                                   " " + leader.getGameProfile().getName();
+                    server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack().withSuppressedOutput(), 
+                            command
+                    );
+                    battleStarted = true;
+                    EvolutionBoost.LOGGER.debug("[gym] Fallback: /pokebattleother");
+                } catch (Exception e) {
+                    EvolutionBoost.LOGGER.debug("[gym] /pokebattleother failed: {}", e.getMessage());
+                }
+            }
+            
+            if (!battleStarted) {
+                try {
+                    String command = "forcebattle " + challenger.getGameProfile().getName() + 
+                                   " " + leader.getGameProfile().getName();
+                    server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack().withSuppressedOutput(), 
+                            command
+                    );
+                    EvolutionBoost.LOGGER.debug("[gym] Fallback: /forcebattle");
+                } catch (Exception e) {
+                    EvolutionBoost.LOGGER.debug("[gym] /forcebattle failed: {}", e.getMessage());
+                }
+            }
 
-            // ActiveBattle tracken (wir bekommen die Battle-ID vom Event)
-            // Temporär mit placeholder UUID - wird vom Hook aktualisiert
+            // ActiveBattle tracken
             UUID tempBattleId = UUID.randomUUID();
             ActiveBattle activeBattle = new ActiveBattle(
                     tempBattleId,
@@ -368,20 +488,27 @@ public final class GymManager {
             activeBattles.put(tempBattleId, activeBattle);
 
             // Nachrichten
+            String formatDisplay = isDoubles ? "Doubles" : "Singles";
+            String levelDisplay = levelCap > 0 ? " (Lv." + levelCap + ")" : "";
+            
             Component battleStart = Component.literal("⚔ ")
                     .withStyle(ChatFormatting.GOLD)
                     .append(Component.literal(gymType.getDisplayName() + " Gym Battle")
                             .withStyle(gymType.getColor(), ChatFormatting.BOLD))
+                    .append(Component.literal(" - " + formatDisplay + levelDisplay)
+                            .withStyle(ChatFormatting.GRAY))
                     .append(Component.literal(" started!")
                             .withStyle(ChatFormatting.WHITE));
             
             challenger.sendSystemMessage(battleStart);
             leader.sendSystemMessage(battleStart);
 
-            EvolutionBoost.LOGGER.info("[gym] Battle started: {} vs {} ({})", 
+            EvolutionBoost.LOGGER.info("[gym] Battle started: {} vs {} ({} - {} Lv.{})", 
                     challenger.getGameProfile().getName(),
                     leader.getGameProfile().getName(),
-                    gymType.getDisplayName());
+                    gymType.getDisplayName(),
+                    battleFormatStr,
+                    levelCap);
 
             return null;
         } catch (Exception e) {
@@ -424,6 +551,34 @@ public final class GymManager {
             }
         }
         return null;
+    }
+
+    /**
+     * Bricht ein Battle ab (z.B. bei Forfeit) - wird NICHT gezählt!
+     */
+    public void cancelBattle(ActiveBattle battle, String reason) {
+        // Battle aus Tracking entfernen
+        activeBattles.values().removeIf(ab -> 
+            ab.challengerUUID.equals(battle.challengerUUID) && 
+            ab.leaderUUID.equals(battle.leaderUUID));
+
+        // Spieler benachrichtigen
+        ServerPlayer challenger = server.getPlayerList().getPlayer(battle.challengerUUID);
+        ServerPlayer leader = server.getPlayerList().getPlayer(battle.leaderUUID);
+
+        Component cancelMsg = Component.literal("✗ ")
+                .withStyle(ChatFormatting.RED)
+                .append(Component.literal("Gym battle cancelled: ")
+                        .withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(reason)
+                        .withStyle(ChatFormatting.GRAY));
+
+        if (challenger != null) challenger.sendSystemMessage(cancelMsg);
+        if (leader != null) leader.sendSystemMessage(cancelMsg);
+
+        EvolutionBoost.LOGGER.info("[gym] Battle cancelled: {} vs {} ({}) - Reason: {}", 
+                battle.challengerName, battle.leaderName, 
+                battle.gymType.getDisplayName(), reason);
     }
 
     /**
