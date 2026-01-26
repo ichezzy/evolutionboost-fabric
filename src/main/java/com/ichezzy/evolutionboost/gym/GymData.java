@@ -38,6 +38,7 @@ public final class GymData {
 
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
+            .serializeNulls()  // Wichtig: null-Werte müssen serialisiert werden
             .create();
 
     private static GymData INSTANCE;
@@ -134,8 +135,8 @@ public final class GymData {
         /** Leader Name */
         public String leaderName;
         
-        /** Battle-Format: "singles" oder "doubles" */
-        public String battleFormat = "singles";
+        /** Battle-Format: "singles" oder "doubles" - null bis explizit gesetzt */
+        public String battleFormat;
         
         /** Level Cap: 50 oder 100 (0 = kein Cap) */
         public int levelCap = 50;
@@ -154,10 +155,10 @@ public final class GymData {
         public LeaderTeamData(String leaderUUID, String leaderName) {
             this.leaderUUID = leaderUUID;
             this.leaderName = leaderName;
-            this.battleFormat = "singles";
+            this.battleFormat = null;  // Wird erst bei setGymRules() gesetzt
             this.levelCap = 50;
             this.lastTeamChange = Instant.now().toString();
-            this.lastRulesChange = Instant.now().toString();
+            this.lastRulesChange = null;  // Wird erst bei setGymRules() gesetzt
             this.team = new ArrayList<>();
         }
     }
@@ -260,10 +261,10 @@ public final class GymData {
         if (playerStats == null) playerStats = new HashMap<>();
         if (leaderTeams == null) leaderTeams = new HashMap<>();
         
-        // Migration: Alte Daten ohne levelCap/lastRulesChange
+        // Migration: Alte Daten ohne levelCap
         for (LeaderTeamData data : leaderTeams.values()) {
             if (data.levelCap == 0) data.levelCap = 50;
-            if (data.lastRulesChange == null) data.lastRulesChange = data.lastTeamChange;
+            // lastRulesChange bleibt null bis Rules explizit gesetzt werden
         }
     }
 
@@ -271,12 +272,31 @@ public final class GymData {
 
     /**
      * Registriert das Team eines Leaders.
+     * Setzt Rules zurück wenn: neuer Eintrag, neuer Leader, oder Leader war nicht registriert.
      */
     public void registerLeaderTeam(String gymType, ServerPlayer leader, List<TeamPokemon> team) {
-        LeaderTeamData teamData = leaderTeams.computeIfAbsent(
-                gymType.toLowerCase(), 
-                k -> new LeaderTeamData(leader.getStringUUID(), leader.getName().getString())
-        );
+        String key = gymType.toLowerCase();
+        LeaderTeamData teamData = leaderTeams.get(key);
+        
+        boolean isNewEntry = (teamData == null);
+        boolean isNewLeader = teamData != null && !leader.getStringUUID().equals(teamData.leaderUUID);
+        
+        // Prüfe ob der Leader vorher als "nicht registriert" markiert war
+        // Das bedeutet, er muss ALLES neu machen (Team + Rules)
+        GymConfig.GymEntry gymEntry = GymConfig.get().getGym(gymType);
+        boolean wasNotRegistered = gymEntry != null && !gymEntry.leaderRegistered;
+        
+        if (isNewEntry) {
+            teamData = new LeaderTeamData(leader.getStringUUID(), leader.getName().getString());
+            leaderTeams.put(key, teamData);
+        }
+        
+        // Wenn neuer Leader ODER Leader war nicht registriert -> Rules zurücksetzen
+        if (isNewLeader || wasNotRegistered) {
+            teamData.battleFormat = null;
+            teamData.lastRulesChange = null;
+            EvolutionBoost.LOGGER.info("[gym] Reset rules for {} Gym (new leader or re-registration)", gymType);
+        }
         
         teamData.leaderUUID = leader.getStringUUID();
         teamData.leaderName = leader.getName().getString();
@@ -352,85 +372,78 @@ public final class GymData {
     }
 
     /**
-     * Prüft ob ein Leader sein Team ändern darf (basierend auf Intervall).
+     * Prüft ob ein Leader sein Team ändern darf (basierend auf Season-Intervall).
      */
     public boolean canChangeTeam(String gymType) {
         LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
         if (team == null || team.lastTeamChange == null) return true;
 
-        int intervalDays = GymConfig.get().teamChangeIntervalDays;
-        if (intervalDays <= 0) return true;
-
-        try {
-            Instant lastChange = Instant.parse(team.lastTeamChange);
-            Instant now = Instant.now();
-            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
-            return daysSinceChange >= intervalDays;
-        } catch (Exception e) {
-            return true;
-        }
+        GymConfig cfg = GymConfig.get();
+        return cfg.canChangeTeamOrRules(team.lastTeamChange);
     }
 
     /**
-     * Prüft ob ein Leader die Rules ändern darf (basierend auf Intervall).
+     * Prüft ob ein Leader die Rules ändern darf (basierend auf Season-Intervall).
+     * Erstes Mal Rules setzen ist IMMER erlaubt.
      */
     public boolean canChangeRules(String gymType) {
         LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
-        if (team == null || team.lastRulesChange == null) return true;
+        if (team == null) return true;
+        
+        // Noch nie Rules gesetzt -> erlaubt
+        if (team.battleFormat == null) return true;
+        if (team.lastRulesChange == null) return true;
+        
+        // Wenn lastRulesChange == lastTeamChange, wurden sie im alten Konstruktor 
+        // gleichzeitig gesetzt -> erstes Mal Rules setzen erlauben
+        if (team.lastRulesChange.equals(team.lastTeamChange)) return true;
 
-        int intervalDays = GymConfig.get().teamChangeIntervalDays; // Gleicher Intervall wie Team
-        if (intervalDays <= 0) return true;
-
-        try {
-            Instant lastChange = Instant.parse(team.lastRulesChange);
-            Instant now = Instant.now();
-            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
-            return daysSinceChange >= intervalDays;
-        } catch (Exception e) {
-            return true;
-        }
+        GymConfig cfg = GymConfig.get();
+        return cfg.canChangeTeamOrRules(team.lastRulesChange);
     }
 
     /**
-     * Gibt die Tage bis zur nächsten möglichen Team-Änderung zurück.
+     * Gibt eine Beschreibung wann die nächste Team-Änderung möglich ist.
      */
+    public String getNextTeamChangeDescription(String gymType) {
+        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
+        if (team == null || team.lastTeamChange == null) return null;
+
+        return GymConfig.get().getNextChangeAllowedDescription(team.lastTeamChange);
+    }
+
+    /**
+     * Gibt eine Beschreibung wann die nächste Rules-Änderung möglich ist.
+     */
+    public String getNextRulesChangeDescription(String gymType) {
+        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
+        if (team == null) return null;
+        
+        // Noch nie Rules gesetzt -> keine Beschränkung
+        if (team.battleFormat == null) return null;
+        if (team.lastRulesChange == null) return null;
+        
+        // Wenn lastRulesChange == lastTeamChange, wurden sie gleichzeitig gesetzt
+        // -> erstes Mal Rules setzen, keine Beschränkung
+        if (team.lastRulesChange.equals(team.lastTeamChange)) return null;
+
+        return GymConfig.get().getNextChangeAllowedDescription(team.lastRulesChange);
+    }
+
+    /**
+     * @deprecated Verwendet das neue Season-System. Verwende getNextTeamChangeDescription().
+     */
+    @Deprecated
     public int getDaysUntilTeamChange(String gymType) {
-        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
-        if (team == null || team.lastTeamChange == null) return 0;
-
-        int intervalDays = GymConfig.get().teamChangeIntervalDays;
-        if (intervalDays <= 0) return 0;
-
-        try {
-            Instant lastChange = Instant.parse(team.lastTeamChange);
-            Instant now = Instant.now();
-            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
-            int remaining = intervalDays - (int) daysSinceChange;
-            return Math.max(0, remaining);
-        } catch (Exception e) {
-            return 0;
-        }
+        return canChangeTeam(gymType) ? 0 : 1;
     }
 
     /**
-     * Gibt die Tage bis zur nächsten möglichen Rules-Änderung zurück.
+     * @deprecated Verwendet das neue Season-System. Verwende getNextRulesChangeDescription().
      */
+    @Deprecated
     public int getDaysUntilRulesChange(String gymType) {
-        LeaderTeamData team = leaderTeams.get(gymType.toLowerCase());
-        if (team == null || team.lastRulesChange == null) return 0;
-
-        int intervalDays = GymConfig.get().teamChangeIntervalDays;
-        if (intervalDays <= 0) return 0;
-
-        try {
-            Instant lastChange = Instant.parse(team.lastRulesChange);
-            Instant now = Instant.now();
-            long daysSinceChange = ChronoUnit.DAYS.between(lastChange, now);
-            int remaining = intervalDays - (int) daysSinceChange;
-            return Math.max(0, remaining);
-        } catch (Exception e) {
-            return 0;
-        }
+        return canChangeRules(gymType) ? 0 : 1;
     }
 
     // ==================== Team Validation ====================

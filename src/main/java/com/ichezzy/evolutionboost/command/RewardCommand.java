@@ -71,6 +71,10 @@ public final class RewardCommand {
                             RewardManager.sendRoleList(ctx.getSource(), "donator_gold");
                             return 1;
                         }))
+                        .then(Commands.literal("donator_platinum").executes(ctx -> {
+                            RewardManager.sendRoleList(ctx.getSource(), "donator_platinum");
+                            return 1;
+                        }))
                         .then(Commands.literal("gym").executes(ctx -> {
                             RewardManager.sendRoleList(ctx.getSource(), "gym");
                             return 1;

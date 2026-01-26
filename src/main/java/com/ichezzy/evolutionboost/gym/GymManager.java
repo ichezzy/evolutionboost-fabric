@@ -56,6 +56,75 @@ public final class GymManager {
         activeBattles.clear();
     }
 
+    /**
+     * Wird beim Spieler-Login aufgerufen.
+     * Zeigt Benachrichtigungen für Gym Leader die noch registrieren müssen.
+     */
+    public void onPlayerJoin(ServerPlayer player) {
+        // Prüfe ob Spieler ein Gym Leader ist
+        GymConfig cfg = GymConfig.get();
+        
+        for (GymType type : GymType.values()) {
+            GymConfig.GymEntry gym = cfg.getGym(type);
+            if (gym == null) continue;
+            
+            // Prüfe ob dieser Spieler der Leader ist
+            String playerUUID = player.getStringUUID();
+            boolean isLeader = playerUUID.equals(gym.currentLeaderUUID);
+            
+            // Auch prüfen auf Offline-UUID Format
+            if (!isLeader && gym.currentLeaderUUID != null && 
+                gym.currentLeaderUUID.startsWith("offline-")) {
+                String offlineName = gym.currentLeaderUUID.substring(8); // "offline-" entfernen
+                if (offlineName.equalsIgnoreCase(player.getGameProfile().getName())) {
+                    // Aktualisiere auf echte UUID
+                    gym.currentLeaderUUID = playerUUID;
+                    GymConfig.save();
+                    isLeader = true;
+                }
+            }
+            
+            if (!isLeader) continue;
+            
+            // Dieser Spieler ist Leader dieses Gyms
+            boolean needsTeam = !gym.leaderRegistered;
+            GymData.LeaderTeamData teamData = GymData.get().getLeaderTeam(type.getId());
+            boolean needsRules = teamData == null || teamData.battleFormat == null;
+            
+            if (needsTeam || needsRules) {
+                // Header
+                player.sendSystemMessage(Component.literal("═══════════════════════════════════")
+                        .withStyle(ChatFormatting.GOLD));
+                player.sendSystemMessage(Component.literal("  ⚔ " + gym.displayName + " Leader")
+                        .withStyle(type.getColor(), ChatFormatting.BOLD));
+                player.sendSystemMessage(Component.literal(""));
+                
+                if (needsTeam) {
+                    player.sendSystemMessage(Component.literal("  ⚠ You need to register your team:")
+                            .withStyle(ChatFormatting.YELLOW));
+                    player.sendSystemMessage(Component.literal("    /eb gym register " + type.getId())
+                            .withStyle(ChatFormatting.GREEN));
+                }
+                
+                if (needsRules) {
+                    player.sendSystemMessage(Component.literal("  ⚠ You need to set battle rules:")
+                            .withStyle(ChatFormatting.YELLOW));
+                    player.sendSystemMessage(Component.literal("    /eb gym rules " + type.getId() + " set <singles|doubles> <50|100>")
+                            .withStyle(ChatFormatting.GREEN));
+                }
+                
+                if (needsTeam || needsRules) {
+                    player.sendSystemMessage(Component.literal(""));
+                    player.sendSystemMessage(Component.literal("  You cannot accept challenges until complete!")
+                            .withStyle(ChatFormatting.RED));
+                }
+                
+                player.sendSystemMessage(Component.literal("═══════════════════════════════════")
+                        .withStyle(ChatFormatting.GOLD));
+            }
+        }
+    }
+
     public MinecraftServer getServer() {
         return server;
     }
@@ -238,6 +307,16 @@ public final class GymManager {
         GymConfig cfg = GymConfig.get();
         GymConfig.GymEntry gym = cfg.getGym(gymType);
         
+        // Off-Season Prüfung
+        if (!cfg.seasonActive) {
+            return "Gym battles are currently disabled (off-season). Wait for a new season to start!";
+        }
+        
+        // Season abgelaufen?
+        if (cfg.isSeasonExpired()) {
+            return "The current season has ended. Wait for a new season to start!";
+        }
+        
         // Prüfungen
         if (gym == null || !gym.enabled) {
             return "This gym is not available.";
@@ -252,6 +331,12 @@ public final class GymManager {
         // Team-Registrierung prüfen
         if (cfg.requireTeamRegistration && !gym.leaderRegistered) {
             return "The gym leader has not registered their team yet.";
+        }
+        
+        // Rules prüfen (Team und Format müssen gesetzt sein)
+        GymData.LeaderTeamData teamData = GymData.get().getLeaderTeam(gymType.getId());
+        if (teamData == null || teamData.battleFormat == null) {
+            return "The gym leader has not set their battle rules yet.";
         }
         
         // Leader online?
@@ -322,6 +407,17 @@ public final class GymManager {
         if (challenge.isExpired()) {
             pendingChallenges.remove(challenge.challengerUUID);
             return "The challenge has expired.";
+        }
+
+        // Prüfe ob Leader noch vollständig registriert ist
+        GymConfig.GymEntry gym = GymConfig.get().getGym(challenge.gymType);
+        if (gym != null && GymConfig.get().requireTeamRegistration && !gym.leaderRegistered) {
+            return "You need to register your team first: /eb gym register " + challenge.gymType.getId();
+        }
+        
+        GymData.LeaderTeamData teamData = GymData.get().getLeaderTeam(challenge.gymType.getId());
+        if (teamData == null || teamData.battleFormat == null) {
+            return "You need to set your battle rules first: /eb gym rules " + challenge.gymType.getId() + " set <format> <levelcap>";
         }
 
         // Challenger noch online?

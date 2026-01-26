@@ -732,7 +732,7 @@ public final class RewardManager {
         catch (Exception ex) { return null; }
     }
 
-    // Liste der Rollen im Chat ausgeben: /rewards list <donator|donator_copper|donator_silver|donator_gold|gym|staff>
+    // Liste der Rollen im Chat ausgeben: /rewards list <donator|donator_copper|donator_silver|donator_gold|donator_platinum|gym|staff>
     public static void sendRoleList(CommandSourceStack src, String roleKey) {
         final Set<String> names;
 
@@ -742,6 +742,7 @@ public final class RewardManager {
             all.addAll(ALLOWED_DONATOR_COPPER);
             all.addAll(ALLOWED_DONATOR_SILVER);
             all.addAll(ALLOWED_DONATOR_GOLD);
+            all.addAll(ALLOWED_DONATOR_PLATINUM);
             names = all;
         } else if ("donator_copper".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_DONATOR_COPPER;
@@ -749,6 +750,8 @@ public final class RewardManager {
             names = ALLOWED_DONATOR_SILVER;
         } else if ("donator_gold".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_DONATOR_GOLD;
+        } else if ("donator_platinum".equalsIgnoreCase(roleKey)) {
+            names = ALLOWED_DONATOR_PLATINUM;
         } else if ("gym".equalsIgnoreCase(roleKey)) {
             names = ALLOWED_GYM;
         } else if ("staff".equalsIgnoreCase(roleKey)) {

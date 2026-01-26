@@ -291,7 +291,7 @@ public final class HelpCommand {
 
         if (hasPermission(src, "evolutionboost.gym.admin", 2)) {
             src.sendSuccess(() -> section("Admin Commands"), false);
-            sendCmdDetail(src, "/eb gym admin setleader <gymtype> <player>", "Appoint a gym leader");
+            sendCmdDetail(src, "/eb gym admin setleader <gymtype> <player>", "Appoint a gym leader (offline OK)");
             sendCmdDetail(src, "/eb gym admin removeleader <gymtype> [reason]", "Remove a gym leader");
             sendCmdDetail(src, "/eb gym admin rewards <gymtype> <badge> <tm> <coins>", "Set gym rewards");
             sendCmdDetail(src, "/eb gym admin info <gymtype>", "Show detailed gym info");
@@ -299,6 +299,9 @@ public final class HelpCommand {
             sendCmdDetail(src, "/eb gym admin resetstats <player|all>", "Reset player gym stats");
             sendCmdDetail(src, "/eb gym admin resetteam <gymtype>", "Reset leader's registered team");
             sendCmdDetail(src, "/eb gym admin rules <gymtype> set/reset", "Set or reset gym rules");
+            sendCmdDetail(src, "/eb gym admin season start <months> <weekly|monthly>", "Start a new season");
+            sendCmdDetail(src, "/eb gym admin season end", "End current season");
+            sendCmdDetail(src, "/eb gym admin season info", "Show season status");
             sendCmdDetail(src, "/eb gym admin history [lines]", "Show leader history");
             sendCmdDetail(src, "/eb gym admin reload", "Reload gym config");
         }

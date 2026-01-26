@@ -41,11 +41,26 @@ public final class GymConfig {
     /** Maximale Distanz für Challenge (in Blöcken) */
     public int challengeRadius = 32;
 
-    /** Tage zwischen Team-Änderungen (0 = unbegrenzt) */
-    public int teamChangeIntervalDays = 30;
-
     /** Ob Team-Registrierung erforderlich ist bevor Leader Challenges annehmen kann */
     public boolean requireTeamRegistration = true;
+
+    // ==================== Season System ====================
+
+    /** Ist eine Season aktiv? */
+    public boolean seasonActive = false;
+
+    /** Wann hat die Season begonnen? (ISO-8601) */
+    public String seasonStartDate = null;
+
+    /** Dauer der Season in Monaten */
+    public int seasonDurationMonths = 3;
+
+    /**
+     * Wie oft dürfen Leader ihr Team/Rules ändern?
+     * "weekly" = zu Beginn jeder Woche (Montag)
+     * "monthly" = zu Beginn jedes Monats
+     */
+    public String seasonChangeInterval = "monthly";
 
     // ==================== Blacklists ====================
 
@@ -231,9 +246,14 @@ public final class GymConfig {
         cfg.leaderMinBattlesForMonthlyReward = 10;
         cfg.challengeTimeoutSeconds = 60;
         cfg.challengeRadius = 32;
-        cfg.teamChangeIntervalDays = 30;
         cfg.requireTeamRegistration = true;
         cfg.maxLevel = 0;
+
+        // Season defaults
+        cfg.seasonActive = false;
+        cfg.seasonStartDate = null;
+        cfg.seasonDurationMonths = 3;
+        cfg.seasonChangeInterval = "monthly";
 
         // Default Blacklists (Beispiele - Admin kann anpassen)
         cfg.challengerBannedItems = new ArrayList<>();
@@ -389,5 +409,153 @@ public final class GymConfig {
      */
     public static boolean isValidBattleFormat(String format) {
         return "singles".equalsIgnoreCase(format) || "doubles".equalsIgnoreCase(format);
+    }
+
+    // ==================== Season System Methods ====================
+
+    /**
+     * Startet eine neue Season.
+     */
+    public void startSeason(int durationMonths, String changeInterval) {
+        this.seasonActive = true;
+        this.seasonStartDate = java.time.Instant.now().toString();
+        this.seasonDurationMonths = durationMonths;
+        this.seasonChangeInterval = changeInterval;
+        save();
+        EvolutionBoost.LOGGER.info("[gym] Season started: {} months, {} change interval", 
+                durationMonths, changeInterval);
+    }
+
+    /**
+     * Beendet die aktuelle Season.
+     */
+    public void endSeason() {
+        this.seasonActive = false;
+        this.seasonStartDate = null;
+        save();
+        EvolutionBoost.LOGGER.info("[gym] Season ended");
+    }
+
+    /**
+     * Prüft ob Team/Rules-Änderung basierend auf Season erlaubt ist.
+     * 
+     * @param lastChangeTimestamp ISO-8601 Timestamp der letzten Änderung (oder null)
+     * @return true wenn Änderung erlaubt
+     */
+    public boolean canChangeTeamOrRules(String lastChangeTimestamp) {
+        // Wenn keine Season aktiv, immer erlaubt
+        if (!seasonActive) return true;
+
+        // Wenn noch nie geändert, erlaubt
+        if (lastChangeTimestamp == null || lastChangeTimestamp.isEmpty()) return true;
+
+        try {
+            java.time.Instant lastChange = java.time.Instant.parse(lastChangeTimestamp);
+            java.time.ZonedDateTime lastZdt = lastChange.atZone(java.time.ZoneId.of("Europe/Berlin"));
+            java.time.ZonedDateTime nowZdt = java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Berlin"));
+
+            if ("weekly".equalsIgnoreCase(seasonChangeInterval)) {
+                // Änderung erlaubt wenn wir in einer ANDEREN Kalenderwoche sind
+                int lastWeek = lastZdt.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear());
+                int lastWeekYear = lastZdt.get(java.time.temporal.WeekFields.ISO.weekBasedYear());
+                int thisWeek = nowZdt.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear());
+                int thisWeekYear = nowZdt.get(java.time.temporal.WeekFields.ISO.weekBasedYear());
+                
+                // Erlaubt wenn anderes Jahr ODER andere Woche im selben Jahr
+                return thisWeekYear > lastWeekYear || 
+                       (thisWeekYear == lastWeekYear && thisWeek > lastWeek);
+            } else {
+                // "monthly" - Änderung erlaubt wenn wir in einem ANDEREN Monat sind
+                int lastMonth = lastZdt.getMonthValue();
+                int lastYear = lastZdt.getYear();
+                int thisMonth = nowZdt.getMonthValue();
+                int thisYear = nowZdt.getYear();
+                
+                // Erlaubt wenn anderes Jahr ODER anderer Monat im selben Jahr
+                return thisYear > lastYear || 
+                       (thisYear == lastYear && thisMonth > lastMonth);
+            }
+        } catch (Exception e) {
+            // Im Fehlerfall erlauben
+            return true;
+        }
+    }
+
+    /**
+     * Berechnet wann die nächste Team/Rules-Änderung möglich ist.
+     * 
+     * @param lastChangeTimestamp ISO-8601 Timestamp der letzten Änderung
+     * @return Beschreibung wann möglich, oder null wenn jetzt möglich
+     */
+    public String getNextChangeAllowedDescription(String lastChangeTimestamp) {
+        if (!seasonActive || canChangeTeamOrRules(lastChangeTimestamp)) {
+            return null;
+        }
+
+        try {
+            java.time.Instant lastChange = java.time.Instant.parse(lastChangeTimestamp);
+            java.time.ZonedDateTime lastZdt = lastChange.atZone(java.time.ZoneId.of("Europe/Berlin"));
+
+            if ("weekly".equalsIgnoreCase(seasonChangeInterval)) {
+                // Nächster Montag nach der letzten Änderung
+                java.time.ZonedDateTime nextMonday = lastZdt.with(java.time.DayOfWeek.MONDAY)
+                        .withHour(0).withMinute(0).withSecond(0).withNano(0);
+                // Wenn lastZdt bereits am/nach Montag ist, nächste Woche
+                if (!lastZdt.isBefore(nextMonday)) {
+                    nextMonday = nextMonday.plusWeeks(1);
+                }
+                return "next Monday (" + nextMonday.toLocalDate() + ")";
+            } else {
+                // Erster Tag des nächsten Monats nach der letzten Änderung
+                java.time.ZonedDateTime nextMonth = lastZdt.plusMonths(1).withDayOfMonth(1)
+                        .withHour(0).withMinute(0).withSecond(0).withNano(0);
+                return "on " + nextMonth.toLocalDate();
+            }
+        } catch (Exception e) {
+            return "later";
+        }
+    }
+
+    /**
+     * Prüft ob die Season abgelaufen ist.
+     */
+    public boolean isSeasonExpired() {
+        if (!seasonActive || seasonStartDate == null) return false;
+
+        try {
+            java.time.Instant start = java.time.Instant.parse(seasonStartDate);
+            java.time.Instant end = start.atZone(java.time.ZoneId.of("Europe/Berlin"))
+                    .plusMonths(seasonDurationMonths)
+                    .toInstant();
+            return java.time.Instant.now().isAfter(end);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Gibt das Season-Enddatum zurück.
+     */
+    public String getSeasonEndDate() {
+        if (!seasonActive || seasonStartDate == null) return null;
+
+        try {
+            java.time.Instant start = java.time.Instant.parse(seasonStartDate);
+            java.time.ZonedDateTime end = start.atZone(java.time.ZoneId.of("Europe/Berlin"))
+                    .plusMonths(seasonDurationMonths);
+            return end.toLocalDate().toString();
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * Gibt Season-Status Info zurück.
+     */
+    public String getSeasonStatus() {
+        if (!seasonActive) return "No active season";
+        
+        String endDate = getSeasonEndDate();
+        return "Season active until " + endDate + " (" + seasonChangeInterval + " changes)";
     }
 }

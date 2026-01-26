@@ -262,18 +262,22 @@ public final class QuestCommand {
                                         .then(Commands.literal("monthly")
                                                 .executes(ctx -> adminCompleteRandomQuest(ctx, RandomQuestPeriod.MONTHLY)))))
 
-                        // /eb quest admin setprogress <player> daily/weekly/monthly <index> <amount>
+                        // /eb quest admin setprogress <player> daily/weekly/monthly [<index> <amount>]
+                        // Ohne index/amount: zeigt Info an, welche Objectives existieren
                         .then(Commands.literal("setprogress")
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.literal("daily")
+                                                .executes(ctx -> adminShowRandomQuestInfo(ctx, RandomQuestPeriod.DAILY))
                                                 .then(Commands.argument("index", IntegerArgumentType.integer(0))
                                                         .then(Commands.argument("amount", IntegerArgumentType.integer(0))
                                                                 .executes(ctx -> adminSetRandomProgress(ctx, RandomQuestPeriod.DAILY)))))
                                         .then(Commands.literal("weekly")
+                                                .executes(ctx -> adminShowRandomQuestInfo(ctx, RandomQuestPeriod.WEEKLY))
                                                 .then(Commands.argument("index", IntegerArgumentType.integer(0))
                                                         .then(Commands.argument("amount", IntegerArgumentType.integer(0))
                                                                 .executes(ctx -> adminSetRandomProgress(ctx, RandomQuestPeriod.WEEKLY)))))
                                         .then(Commands.literal("monthly")
+                                                .executes(ctx -> adminShowRandomQuestInfo(ctx, RandomQuestPeriod.MONTHLY))
                                                 .then(Commands.argument("index", IntegerArgumentType.integer(0))
                                                         .then(Commands.argument("amount", IntegerArgumentType.integer(0))
                                                                 .executes(ctx -> adminSetRandomProgress(ctx, RandomQuestPeriod.MONTHLY))))))));
@@ -1262,6 +1266,63 @@ public final class QuestCommand {
                 ctx.getSource().sendFailure(Component.literal("Invalid objective index or quest not found"));
                 return 0;
             }
+        } catch (Exception e) {
+            ctx.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Zeigt Info über die aktuellen Random Quest Objectives für einen Spieler.
+     * Hilft Admins zu verstehen, welche Indices verfügbar sind.
+     */
+    private static int adminShowRandomQuestInfo(CommandContext<CommandSourceStack> ctx, RandomQuestPeriod period) {
+        try {
+            ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+            RandomQuestManager manager = RandomQuestManager.get();
+            RandomQuestManager.QuestProgress progress = manager.getProgress(target.getUUID(), period);
+            RandomQuestManager.GeneratedQuest quest = manager.getQuest(period);
+
+            CommandSourceStack src = ctx.getSource();
+
+            src.sendSuccess(() -> Component.literal("══════ " + period.getDisplayName() + " Quest Info ══════")
+                    .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+            src.sendSuccess(() -> Component.literal("  Player: " + target.getName().getString())
+                    .withStyle(ChatFormatting.GRAY), false);
+
+            if (progress == null || quest == null) {
+                src.sendSuccess(() -> Component.literal("  No active " + period.getDisplayName().toLowerCase() + " quest")
+                        .withStyle(ChatFormatting.RED), false);
+                return 1;
+            }
+
+            src.sendSuccess(() -> Component.literal("  Status: " + (progress.completed ? "✓ Completed" : "In Progress"))
+                    .withStyle(progress.completed ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
+
+            // Objectives anzeigen
+            src.sendSuccess(() -> Component.literal("  Objectives:").withStyle(ChatFormatting.AQUA), false);
+
+            for (int i = 0; i < quest.objectives.size(); i++) {
+                RandomQuestManager.GeneratedObjective obj = quest.objectives.get(i);
+                int currentProgress = i < progress.objectiveProgress.length ? progress.objectiveProgress[i] : 0;
+                int targetAmount = obj.amount;
+                boolean complete = currentProgress >= targetAmount;
+
+                final int idx = i;
+                final String desc = obj.getDescription();
+                src.sendSuccess(() -> Component.literal("    [" + idx + "] " + desc + ": ")
+                        .withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(currentProgress + "/" + targetAmount)
+                                .withStyle(complete ? ChatFormatting.GREEN : ChatFormatting.WHITE)), false);
+            }
+
+            // Usage hint
+            src.sendSuccess(() -> Component.literal(""), false);
+            src.sendSuccess(() -> Component.literal("  Usage: /eb quest admin setprogress " + target.getName().getString() + 
+                    " " + period.name().toLowerCase() + " <index> <amount>")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+
+            return 1;
         } catch (Exception e) {
             ctx.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
             return 0;

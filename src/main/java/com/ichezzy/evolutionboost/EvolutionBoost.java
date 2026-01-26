@@ -167,7 +167,7 @@ public class EvolutionBoost implements ModInitializer {
             if (player != null) {
                 RewardManager.onPlayerJoin(player);
                 
-                // Quest und Dex-Benachrichtigungen mit 2 Sekunden Verzögerung
+                // Alle Benachrichtigungen mit 2 Sekunden Verzögerung
                 final UUID playerId = player.getUUID();
                 java.util.concurrent.CompletableFuture.runAsync(() -> {
                     try {
@@ -175,9 +175,15 @@ public class EvolutionBoost implements ModInitializer {
                         server.execute(() -> {
                             ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(playerId);
                             if (onlinePlayer != null) {
+                                // Gym Leader Benachrichtigungen
+                                GymManager.get().onPlayerJoin(onlinePlayer);
+                                
+                                // Quest Benachrichtigungen
                                 QuestManager.get().notifyAvailableQuests(onlinePlayer);
-                                QuestManager.get().notifyReadyToTurnIn(onlinePlayer); // Turn-in Hinweise
-                                RandomQuestManager.get().notifyOnLogin(onlinePlayer); // Random Quest Hinweise
+                                QuestManager.get().notifyReadyToTurnIn(onlinePlayer);
+                                RandomQuestManager.get().notifyOnLogin(onlinePlayer);
+                                
+                                // Dex Benachrichtigungen
                                 DexDataManager.notifyOnJoin(onlinePlayer);
                             }
                         });

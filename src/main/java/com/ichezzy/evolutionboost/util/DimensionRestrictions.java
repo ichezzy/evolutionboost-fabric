@@ -9,6 +9,7 @@ import net.minecraft.world.level.Level;
  * Beschränkte Dimensionen (kein Fliegen, kein Fallschaden):
  * - event:* (alle event-Dimensionen)
  * - evolution:* (alle evolution-Dimensionen, AUSSER evolution:quarry)
+ * - evolutionboost:* (alle evolutionboost-Dimensionen)
  */
 public final class DimensionRestrictions {
 
@@ -43,6 +44,11 @@ public final class DimensionRestrictions {
         if (namespace.equals("evolution")) {
             // quarry erlaubt Fliegen
             return !path.equals("quarry");
+        }
+
+        // evolutionboost:* - alle evolutionboost-Dimensionen sind beschränkt
+        if (namespace.equals("evolutionboost")) {
+            return true;
         }
 
         return false;

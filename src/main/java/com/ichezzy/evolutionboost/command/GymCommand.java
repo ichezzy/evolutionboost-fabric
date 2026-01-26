@@ -74,6 +74,25 @@ public final class GymCommand {
     private static final SuggestionProvider<CommandSourceStack> LEVEL_CAP_SUGGESTIONS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(List.of("50", "100"), builder);
 
+    private static final SuggestionProvider<CommandSourceStack> RESETSTATS_SUGGESTIONS = (ctx, builder) -> {
+        List<String> suggestions = new ArrayList<>();
+        suggestions.add("all");
+        // Online-Spieler hinzufügen
+        ctx.getSource().getServer().getPlayerList().getPlayers().forEach(p -> 
+                suggestions.add(p.getGameProfile().getName()));
+        return SharedSuggestionProvider.suggest(suggestions, builder);
+    };
+
+    private static final SuggestionProvider<CommandSourceStack> ONLINE_PLAYER_SUGGESTIONS = (ctx, builder) -> {
+        List<String> names = ctx.getSource().getServer().getPlayerList().getPlayers().stream()
+                .map(p -> p.getGameProfile().getName())
+                .toList();
+        return SharedSuggestionProvider.suggest(names, builder);
+    };
+
+    private static final SuggestionProvider<CommandSourceStack> SEASON_INTERVAL_SUGGESTIONS = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(List.of("weekly", "monthly"), builder);
+
     private GymCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -130,8 +149,9 @@ public final class GymCommand {
                         .then(Commands.literal("setleader")
                                 .then(Commands.argument("gymtype", StringArgumentType.word())
                                         .suggests(GYM_TYPE_SUGGESTIONS)
-                                        .then(Commands.argument("player", EntityArgument.player())
-                                                .executes(ctx -> setLeaderWrapper(ctx)))))
+                                        .then(Commands.argument("playername", StringArgumentType.word())
+                                                .suggests(ONLINE_PLAYER_SUGGESTIONS)
+                                                .executes(GymCommand::setLeaderByName))))
                         
                         .then(Commands.literal("removeleader")
                                 .then(Commands.argument("gymtype", StringArgumentType.word())
@@ -166,6 +186,7 @@ public final class GymCommand {
                         
                         .then(Commands.literal("resetstats")
                                 .then(Commands.argument("target", StringArgumentType.word())
+                                        .suggests(RESETSTATS_SUGGESTIONS)
                                         .executes(GymCommand::resetStats)))
                         
                         .then(Commands.literal("resetteam")
@@ -184,6 +205,17 @@ public final class GymCommand {
                                                                 .executes(GymCommand::adminSetRules))))
                                         .then(Commands.literal("reset")
                                                 .executes(GymCommand::adminResetRules))))
+                        
+                        .then(Commands.literal("season")
+                                .then(Commands.literal("start")
+                                        .then(Commands.argument("months", IntegerArgumentType.integer(1, 12))
+                                                .then(Commands.argument("interval", StringArgumentType.word())
+                                                        .suggests(SEASON_INTERVAL_SUGGESTIONS)
+                                                        .executes(GymCommand::startSeason))))
+                                .then(Commands.literal("end")
+                                        .executes(GymCommand::endSeason))
+                                .then(Commands.literal("info")
+                                        .executes(GymCommand::showSeasonInfo)))
                         
                         .then(Commands.literal("history")
                                 .executes(ctx -> showHistory(ctx, 20))
@@ -239,8 +271,9 @@ public final class GymCommand {
                         .then(Commands.literal("setleader")
                                 .then(Commands.argument("gymtype", StringArgumentType.word())
                                         .suggests(GYM_TYPE_SUGGESTIONS)
-                                        .then(Commands.argument("player", EntityArgument.player())
-                                                .executes(ctx -> setLeaderWrapper(ctx)))))
+                                        .then(Commands.argument("playername", StringArgumentType.word())
+                                                .suggests(ONLINE_PLAYER_SUGGESTIONS)
+                                                .executes(GymCommand::setLeaderByName))))
                         .then(Commands.literal("removeleader")
                                 .then(Commands.argument("gymtype", StringArgumentType.word())
                                         .suggests(GYM_TYPE_SUGGESTIONS)
@@ -269,6 +302,7 @@ public final class GymCommand {
                                         .executes(ctx -> setEnabled(ctx, false))))
                         .then(Commands.literal("resetstats")
                                 .then(Commands.argument("target", StringArgumentType.word())
+                                        .suggests(RESETSTATS_SUGGESTIONS)
                                         .executes(GymCommand::resetStats)))
                         .then(Commands.literal("resetteam")
                                 .then(Commands.argument("gymtype", StringArgumentType.word())
@@ -285,6 +319,16 @@ public final class GymCommand {
                                                                 .executes(GymCommand::adminSetRules))))
                                         .then(Commands.literal("reset")
                                                 .executes(GymCommand::adminResetRules))))
+                        .then(Commands.literal("season")
+                                .then(Commands.literal("start")
+                                        .then(Commands.argument("months", IntegerArgumentType.integer(1, 12))
+                                                .then(Commands.argument("interval", StringArgumentType.word())
+                                                        .suggests(SEASON_INTERVAL_SUGGESTIONS)
+                                                        .executes(GymCommand::startSeason))))
+                                .then(Commands.literal("end")
+                                        .executes(GymCommand::endSeason))
+                                .then(Commands.literal("info")
+                                        .executes(GymCommand::showSeasonInfo)))
                         .then(Commands.literal("history")
                                 .executes(ctx -> showHistory(ctx, 20))
                                 .then(Commands.argument("lines", IntegerArgumentType.integer(1, 100))
@@ -314,13 +358,154 @@ public final class GymCommand {
         }
     }
 
-    private static int setLeaderWrapper(CommandContext<CommandSourceStack> ctx) {
-        try {
-            return setLeader(ctx);
-        } catch (Exception e) {
-            ctx.getSource().sendFailure(Component.literal("Player not found"));
+    /**
+     * Setzt einen Leader per Spielername (funktioniert auch offline).
+     */
+    private static int setLeaderByName(CommandContext<CommandSourceStack> ctx) {
+        String typeId = StringArgumentType.getString(ctx, "gymtype");
+        String playerName = StringArgumentType.getString(ctx, "playername");
+        GymType type = GymType.fromId(typeId);
+        
+        if (type == null) {
+            ctx.getSource().sendFailure(Component.literal("Unknown gym type: " + typeId));
             return 0;
         }
+
+        GymConfig cfg = GymConfig.get();
+        GymConfig.GymEntry gym = cfg.getGym(type);
+        
+        if (gym == null) {
+            ctx.getSource().sendFailure(Component.literal("Gym not found"));
+            return 0;
+        }
+
+        // Prüfe ob Spieler online ist für UUID
+        ServerPlayer onlinePlayer = ctx.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+        String playerUUID;
+        
+        if (onlinePlayer != null) {
+            playerUUID = onlinePlayer.getStringUUID();
+        } else {
+            // Spieler offline - verwende Namen als UUID-Platzhalter
+            // UUID wird später beim ersten Login aktualisiert
+            playerUUID = "offline-" + playerName.toLowerCase();
+        }
+
+        // Altes Team entfernen wenn anderer Leader
+        if (gym.currentLeaderUUID != null && !gym.currentLeaderUUID.equals(playerUUID)) {
+            GymData.get().removeLeaderTeam(typeId);
+        }
+
+        gym.currentLeader = playerName;
+        gym.currentLeaderUUID = playerUUID;
+        gym.leaderStartDate = Instant.now().toString();
+        gym.leaderRegistered = false;
+        GymConfig.save();
+
+        GymLeaderHistory.logLeaderChange(type.getId(), playerName, playerUUID, "Set by admin");
+
+        ctx.getSource().sendSuccess(() -> Component.literal("✓ " + playerName + 
+                " is now the " + gym.displayName + " Leader").withStyle(ChatFormatting.GREEN), true);
+
+        // Notify wenn online
+        if (onlinePlayer != null) {
+            onlinePlayer.sendSystemMessage(Component.literal("═══════════════════════════════════")
+                    .withStyle(ChatFormatting.GOLD));
+            onlinePlayer.sendSystemMessage(Component.literal("  You have been appointed as the")
+                    .withStyle(ChatFormatting.YELLOW));
+            onlinePlayer.sendSystemMessage(Component.literal("  " + gym.displayName + " Leader!")
+                    .withStyle(type.getColor(), ChatFormatting.BOLD));
+            onlinePlayer.sendSystemMessage(Component.literal(""));
+            onlinePlayer.sendSystemMessage(Component.literal("  1. Register your team:")
+                    .withStyle(ChatFormatting.GRAY));
+            onlinePlayer.sendSystemMessage(Component.literal("     /eb gym register " + type.getId())
+                    .withStyle(ChatFormatting.GREEN));
+            onlinePlayer.sendSystemMessage(Component.literal("  2. Set battle rules:")
+                    .withStyle(ChatFormatting.GRAY));
+            onlinePlayer.sendSystemMessage(Component.literal("     /eb gym rules " + type.getId() + " set <format> <levelcap>")
+                    .withStyle(ChatFormatting.GREEN));
+            onlinePlayer.sendSystemMessage(Component.literal("═══════════════════════════════════")
+                    .withStyle(ChatFormatting.GOLD));
+        } else {
+            ctx.getSource().sendSuccess(() -> Component.literal("  Note: Player is offline, they will be notified when they join.")
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
+
+        return 1;
+    }
+
+    // ==================== Season Commands ====================
+
+    private static int startSeason(CommandContext<CommandSourceStack> ctx) {
+        int months = IntegerArgumentType.getInteger(ctx, "months");
+        String interval = StringArgumentType.getString(ctx, "interval").toLowerCase();
+        
+        if (!interval.equals("weekly") && !interval.equals("monthly")) {
+            ctx.getSource().sendFailure(Component.literal("Invalid interval. Use 'weekly' or 'monthly'."));
+            return 0;
+        }
+
+        GymConfig cfg = GymConfig.get();
+        cfg.startSeason(months, interval);
+
+        ctx.getSource().sendSuccess(() -> Component.literal("✓ Season started!")
+                .withStyle(ChatFormatting.GREEN), true);
+        ctx.getSource().sendSuccess(() -> Component.literal("  Duration: " + months + " months")
+                .withStyle(ChatFormatting.GRAY), false);
+        ctx.getSource().sendSuccess(() -> Component.literal("  Team/Rules changes: " + interval)
+                .withStyle(ChatFormatting.GRAY), false);
+        ctx.getSource().sendSuccess(() -> Component.literal("  End date: " + cfg.getSeasonEndDate())
+                .withStyle(ChatFormatting.GRAY), false);
+
+        return 1;
+    }
+
+    private static int endSeason(CommandContext<CommandSourceStack> ctx) {
+        GymConfig cfg = GymConfig.get();
+        
+        if (!cfg.seasonActive) {
+            ctx.getSource().sendFailure(Component.literal("No active season to end."));
+            return 0;
+        }
+
+        cfg.endSeason();
+
+        ctx.getSource().sendSuccess(() -> Component.literal("✓ Season ended!")
+                .withStyle(ChatFormatting.GREEN), true);
+        ctx.getSource().sendSuccess(() -> Component.literal("  Leaders can now change their teams/rules freely.")
+                .withStyle(ChatFormatting.GRAY), false);
+
+        return 1;
+    }
+
+    private static int showSeasonInfo(CommandContext<CommandSourceStack> ctx) {
+        GymConfig cfg = GymConfig.get();
+
+        ctx.getSource().sendSuccess(() -> Component.literal("══════ Season Info ══════")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+
+        if (cfg.seasonActive) {
+            ctx.getSource().sendSuccess(() -> Component.literal("  Status: ")
+                    .append(Component.literal("Active").withStyle(ChatFormatting.GREEN)), false);
+            ctx.getSource().sendSuccess(() -> Component.literal("  Duration: " + cfg.seasonDurationMonths + " months")
+                    .withStyle(ChatFormatting.GRAY), false);
+            ctx.getSource().sendSuccess(() -> Component.literal("  Change interval: " + cfg.seasonChangeInterval)
+                    .withStyle(ChatFormatting.GRAY), false);
+            ctx.getSource().sendSuccess(() -> Component.literal("  End date: " + cfg.getSeasonEndDate())
+                    .withStyle(ChatFormatting.GRAY), false);
+            
+            if (cfg.isSeasonExpired()) {
+                ctx.getSource().sendSuccess(() -> Component.literal("  ⚠ Season has expired! Use /eb gym admin season end")
+                        .withStyle(ChatFormatting.YELLOW), false);
+            }
+        } else {
+            ctx.getSource().sendSuccess(() -> Component.literal("  Status: ")
+                    .append(Component.literal("No active season").withStyle(ChatFormatting.GRAY)), false);
+            ctx.getSource().sendSuccess(() -> Component.literal("  Start with: /eb gym admin season start <months> <weekly|monthly>")
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
+
+        return 1;
     }
 
     // ==================== Player Commands ====================
@@ -332,6 +517,22 @@ public final class GymCommand {
 
         src.sendSuccess(() -> Component.literal("══════ Gym Overview ══════")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+
+        // Season Status anzeigen
+        if (cfg.seasonActive) {
+            if (cfg.isSeasonExpired()) {
+                src.sendSuccess(() -> Component.literal("  ⚠ Season ended - waiting for new season")
+                        .withStyle(ChatFormatting.RED), false);
+            } else {
+                String seasonInfo = cfg.getSeasonStatus();
+                src.sendSuccess(() -> Component.literal("  ✓ " + seasonInfo)
+                        .withStyle(ChatFormatting.GREEN), false);
+            }
+        } else {
+            src.sendSuccess(() -> Component.literal("  ✗ Off-Season - Gym battles disabled")
+                    .withStyle(ChatFormatting.RED), false);
+        }
+        src.sendSuccess(() -> Component.literal(""), false);
 
         for (GymType type : GymType.values()) {
             GymConfig.GymEntry gym = cfg.getGym(type);
@@ -607,8 +808,12 @@ public final class GymCommand {
         
         // Prüfe ob Team-Änderung erlaubt ist
         if (gym.leaderRegistered && !data.canChangeTeam(typeId)) {
-            int daysLeft = data.getDaysUntilTeamChange(typeId);
-            ctx.getSource().sendFailure(Component.literal("You can change your team in " + daysLeft + " days"));
+            String nextChange = data.getNextTeamChangeDescription(typeId);
+            if (nextChange != null) {
+                ctx.getSource().sendFailure(Component.literal("You can change your team " + nextChange));
+            } else {
+                ctx.getSource().sendFailure(Component.literal("You cannot change your team yet"));
+            }
             return 0;
         }
 
@@ -657,9 +862,10 @@ public final class GymCommand {
                                 new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, 
                                         "/eb gym rules " + typeId + " set singles 50")))), false);
 
-        int changeDays = cfg.teamChangeIntervalDays;
-        if (changeDays > 0) {
-            ctx.getSource().sendSuccess(() -> Component.literal("  You can change your team in " + changeDays + " days")
+        // Season-basierter Hinweis
+        String nextChange = GymData.get().getNextTeamChangeDescription(typeId);
+        if (nextChange != null) {
+            ctx.getSource().sendSuccess(() -> Component.literal("  You can change your team again " + nextChange)
                     .withStyle(ChatFormatting.DARK_GRAY), false);
         }
 
@@ -704,8 +910,12 @@ public final class GymCommand {
 
         // Prüfe ob Rules-Änderung erlaubt ist
         if (!data.canChangeRules(typeId)) {
-            int daysLeft = data.getDaysUntilRulesChange(typeId);
-            ctx.getSource().sendFailure(Component.literal("You can change rules in " + daysLeft + " days"));
+            String nextChange = data.getNextRulesChangeDescription(typeId);
+            if (nextChange != null) {
+                ctx.getSource().sendFailure(Component.literal("You can change rules " + nextChange));
+            } else {
+                ctx.getSource().sendFailure(Component.literal("You cannot change rules yet"));
+            }
             return 0;
         }
 
@@ -717,9 +927,10 @@ public final class GymCommand {
         ctx.getSource().sendSuccess(() -> Component.literal("  Format: " + format + " | Level Cap: " + levelCap)
                 .withStyle(ChatFormatting.GRAY), false);
 
-        int changeDays = GymConfig.get().teamChangeIntervalDays;
-        if (changeDays > 0) {
-            ctx.getSource().sendSuccess(() -> Component.literal("  You can change rules again in " + changeDays + " days")
+        // Season-basierter Hinweis
+        String nextChange = data.getNextRulesChangeDescription(typeId);
+        if (nextChange != null) {
+            ctx.getSource().sendSuccess(() -> Component.literal("  You can change rules again " + nextChange)
                     .withStyle(ChatFormatting.DARK_GRAY), false);
         }
 
@@ -979,15 +1190,34 @@ public final class GymCommand {
             ctx.getSource().sendSuccess(() -> Component.literal("✓ Reset all player gym stats")
                     .withStyle(ChatFormatting.GREEN), true);
         } else {
+            // Zuerst online Spieler prüfen
             ServerPlayer player = ctx.getSource().getServer().getPlayerList().getPlayerByName(target);
             if (player != null) {
                 GymData.get().resetPlayerStats(player.getStringUUID());
                 ctx.getSource().sendSuccess(() -> Component.literal("✓ Reset gym stats for " + target)
                         .withStyle(ChatFormatting.GREEN), true);
             } else {
-                ctx.getSource().sendFailure(Component.literal("Player not found: " + target + 
-                        ". Use 'all' to reset all stats."));
-                return 0;
+                // Offline - versuche UUID direkt zu verwenden falls es eine ist
+                String targetLower = target.toLowerCase();
+                GymData data = GymData.get();
+                
+                // Prüfe ob es eine UUID ist
+                if (target.contains("-") && target.length() > 30) {
+                    data.resetPlayerStats(target);
+                    ctx.getSource().sendSuccess(() -> Component.literal("✓ Reset gym stats for UUID " + target)
+                            .withStyle(ChatFormatting.GREEN), true);
+                } else {
+                    ctx.getSource().sendFailure(Component.literal("Player '" + target + "' is not online."));
+                    ctx.getSource().sendSuccess(() -> Component.literal("  Options:")
+                            .withStyle(ChatFormatting.GRAY), false);
+                    ctx.getSource().sendSuccess(() -> Component.literal("  - Use 'all' to reset everyone")
+                            .withStyle(ChatFormatting.GRAY), false);
+                    ctx.getSource().sendSuccess(() -> Component.literal("  - Wait until player is online")
+                            .withStyle(ChatFormatting.GRAY), false);
+                    ctx.getSource().sendSuccess(() -> Component.literal("  - Use player's UUID directly")
+                            .withStyle(ChatFormatting.GRAY), false);
+                    return 0;
+                }
             }
         }
         

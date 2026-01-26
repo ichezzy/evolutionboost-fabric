@@ -163,7 +163,7 @@ public final class RewardConfig {
     public static RewardConfig defaults() {
         RewardConfig c = new RewardConfig();
 
-        // DAILY: 5x Bronze-Münze
+        // DAILY: 1x Bronze-Münze
         c.rewards.put("DAILY", List.of(
                 new RewardItem("evolutionboost:evolution_coin_bronze", 1)
         ));
